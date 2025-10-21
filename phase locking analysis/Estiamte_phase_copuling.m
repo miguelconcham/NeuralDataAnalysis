@@ -1,0 +1,398 @@
+
+
+
+
+
+npx_Raw_Data = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\NPX data\NPX raw data';
+saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
+animal_list = dir(npx_Raw_Data);
+animal_list(1:2) = [];
+
+
+animal_file_names =  cellfun(@(x) ['B', x],strsplit([animal_list.name], 'B'), 'UniformOutput',false)';
+animal_file_names(1) = [];
+% animal2exclude = {'B4D4 0826 Dual'};
+animal2exclude = {''};
+animal_list(ismember(animal_file_names,animal2exclude)) = [];
+animal_names ={};
+n_strctut = 1;
+
+freq_range_1    = [1 5];
+freq_range_2    = [6 12];
+sr              = 2500;
+filter_order    = 2000;
+
+
+phase_struct = [];
+% Parameters for delta
+% Hd_freq = designfilt('bandpassfir', ...
+% 'FilterOrder', filter_order, ...
+% 'CutoffFrequency1', freq_range_1(1), ...
+% 'CutoffFrequency2', freq_range_1(2), ...
+% 'SampleRate', sr, ...
+% 'DesignMethod', 'window', ...
+% 'Window', 'hamming');
+% bin_size_freq = 0.01;
+
+% Parameters for theta
+Hd_freq = designfilt('bandpassfir', ...
+'FilterOrder', filter_order, ...
+'CutoffFrequency1', freq_range_2(1), ...
+'CutoffFrequency2', freq_range_2(2), ...
+'SampleRate', sr, ...
+'DesignMethod', 'window', ...
+'Window', 'hamming');
+bin_size_freq = 0.001;
+
+%%
+tic
+for fn = 1:numel(animal_list)
+    
+    if fn==1
+        phase_struct  = GENERATE_PHASE_COUPLING_STRUCTURE([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq,bin_size_freq );
+         
+        n_strctut = n_strctut+numel(phase_struct);
+        animal_names = [animal_names;[repmat(animal_list(fn).name,numel(phase_struct),1) num2cell(1:numel(phase_struct))']]
+    else
+        transt_psth = GENERATE_PHASE_COUPLING_STRUCTURE([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq,bin_size_freq );
+      
+        for sub_j=1:numel(transt_psth)
+    
+            phase_struct(n_strctut) = transt_psth(sub_j);
+            n_strctut = n_strctut+1;
+        end
+        animal_names = [animal_names;[repmat({animal_list(fn).name},numel(transt_psth),1) num2cell(1:numel(transt_psth))' ]]
+
+    end
+toc
+
+end
+
+
+%% save if needed
+disp('saving')
+save([saving_folder,'\theta_phase_couplig_structure_updated.mat'],'phase_struct', '-v7.3');
+save([saving_folder,'\theta_phase_couplig_animal_names_updated.mat'],'animal_names');
+
+%% load
+load([saving_folder,'\delta_phase_couplig_structure.mat'],'phase_struct');
+load([saving_folder,'\delta_phase_couplig_animal_names.mat'],'animal_names');
+% phase_struct(6 )=[];
+% animal_names(6,:)=[];
+%%
+
+ phase_prop_names = {'PreferedAngle','MVL','MVLPval','PPC','PPCPval','MeanRate', 'Id'};
+
+all_session_phase_stats = [];
+all_session_psth        = [];
+
+all_neurons = [];
+for ns = 1:numel(phase_struct)
+
+    all_session_phase_stats = cat(2,all_session_phase_stats, phase_struct(ns).session_phase_stats(1:2,:,:));
+     all_session_psth = cat(2,all_session_psth, phase_struct(ns).session_psth(1:2,:,:));
+     this_session_cluster_info = phase_struct(ns).cluster_info;
+     sub_Table =  array2table(squeeze(phase_struct(ns).session_phase_stats(1,:,:)));
+     sub_Table.Properties.VariableNames =phase_prop_names;
+     this_session_cluster_info.Partner1 =sub_Table;
+     sub_Table =  array2table(squeeze(phase_struct(ns).session_phase_stats(2,:,:)));
+     sub_Table.Properties.VariableNames = phase_prop_names;
+     this_session_cluster_info.Partner2 =sub_Table;
+     this_session_cluster_info.session = repmat(animal_names(ns,1),size(this_session_cluster_info,1),1);
+
+     sub_Table =  array2table(squeeze(phase_struct(ns).entire_recording_phase_stats(1,:,:)));
+     sub_Table.Properties.VariableNames = phase_prop_names;
+     this_session_cluster_info.EntireSession =sub_Table;
+     this_session_cluster_info.session = repmat(animal_names(ns,1),size(this_session_cluster_info,1),1);
+     all_neurons = [all_neurons; this_session_cluster_info];
+end
+
+%%
+
+save([saving_folder,'\delta_all_neurons.mat'],'all_neurons', '-v7.3');
+%% ploting rate change
+all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
+% area_list = unique(all_neurons.area)';
+
+% area_list =  {'4N'	'DLPAG'	'DMPAG'	'DR'	'InfCol'	'LPAG'	'LSD'	'LSI'	'SupCol'	'VLPAG'	'isRt'	'mlf'};
+
+area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' 'isRt'	};
+col = strcmp(phase_prop_names, 'MeanRate');
+figure
+concatenated_rate_differences = [];
+mean_rate_differences = [];
+d_prime = [];
+for an=1:numel(area_list)
+    subplot(1,numel(area_list),an)
+    index = strcmp(all_neurons.area, area_list{an}) & all_neurons.Partner1.PPCPval<alpha  & all_neurons.Partner2.PPCPval<alpha & ~isnan(all_neurons.Partner1.PPC + all_neurons.Partner2.PPC);
+    x_jit = (rand(sum(index),2) -.5)*.25;
+    matrix2plot = 100*(squeeze(all_session_phase_stats(:,index,col))-repmat(all_neurons.fr(index)',2,1))./repmat(all_neurons.fr(index)',2,1);
+    plot((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,':k')
+    mean_rate_differences = [mean_rate_differences;mean([diff(matrix2plot)' ones(size(matrix2plot,2),1)*an], 'omitmissing')];    
+
+
+     d_prime = [d_prime;[2*mean(diff(matrix2plot))/sqrt(sum(std(matrix2plot,[],2))) an]];    
+    concatenated_rate_differences = [concatenated_rate_differences;[diff(matrix2plot)' ones(size(matrix2plot,2),1)*an]];
+    hold on
+        plot((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,'.k', 'MarkerSize',3)
+
+    hold on
+    plot([1 2]',mean(matrix2plot,2, 'omitmissing'),'_r', 'MarkerSize',4)
+    if all(any(isnan(squeeze(all_session_phase_stats(:,index,col))),1))
+        p = 1;
+    else
+        [p,h,t] = signrank(matrix2plot(1,:), matrix2plot(2,:));
+        % [h,p,t] = ttest(matrix2plot(1,:), matrix2plot(2,:))
+    end
+    ylim([-200 200])
+    title([area_list{an},  ' ', num2str(p)])
+end
+%%
+
+figure(area_figure )
+
+subplot(3,1,2)
+subplot(1,2,1)
+swarmchart(concatenated_rate_differences(:,2), concatenated_rate_differences(:,1), 'k.')
+hold on
+plot(mean_rate_differences(:,2),mean_rate_differences(:,1), '_r')
+
+plot([0 numel(area_list)+1], [0 0], 'r')
+xticks(1:numel(area_list))
+xticklabels(area_list)
+xlim tight
+ylim([-100 100])
+
+subplot(1,2,2)
+bar(d_prime(:,1))
+xticks(1:numel(area_list))
+xticklabels(area_list)
+xlim tight
+
+%% ploting entreinment change per area
+area_list = unique(all_neurons.area);
+alpha= 0.01;
+area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' 'isRt'	};
+
+col = strcmp(phase_prop_names, 'PPCPval');
+entreinment_per_partner = nan(numel(area_list),6);
+figure
+for an=1:numel(area_list)
+    subplot(1,numel(area_list),an)
+    index = strcmp(all_neurons.area, area_list{an});
+    x_jit = (rand(sum(index),2) -.5)*.25;
+    semilogy((repmat([1 2],sum(index),1)+x_jit)',squeeze(all_session_phase_stats(:,index,col)),':k')
+    p1_bool     = all_neurons.Partner1.PPCPval(index)<alpha;
+    p2_bool     = all_neurons.Partner2.PPCPval(index)<alpha;
+    all_bool    = all_neurons.EntireSession.PPCPval(index)<alpha;
+    entreinment_per_partner(an,:) = [sum(p1_bool & p2_bool) sum(p1_bool & ~p2_bool) sum(~p1_bool & p2_bool) sum(~p1_bool & ~p2_bool & all_bool) sum(~p1_bool & ~p2_bool & ~all_bool) sum(index)*sum(index)]/sum(index);
+    hold on
+semilogy([0 2.5],[alpha alpha],'r')
+title(area_list{an})
+end
+%%
+
+%%
+all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
+% area_list = unique(all_neurons.area)';
+
+% area_list =  {'4N'	'DLPAG'	'DMPAG'	'DR'	'InfCol'	'LPAG'	'LSD'	'LSI'	'SupCol'	'VLPAG'	'isRt'	'mlf'};
+
+area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' 'isRt'	};
+y_lim = [10^-6 5]
+col = strcmp(phase_prop_names, 'PPC');
+figure
+concatenated_phase_differences = [];
+mean_phase_differences = [];
+for an=1:numel(area_list)
+    subplot(1,numel(area_list),an)
+    index = strcmp(all_neurons.area, area_list{an}) & all_neurons.Partner1.PPCPval<alpha  & all_neurons.Partner2.PPCPval<alpha & ~isnan(all_neurons.Partner1.PPC + all_neurons.Partner2.PPC);
+    x_jit = (rand(sum(index),2) -.5)*.25;
+        matrix2plot = squeeze(all_session_phase_stats(:,index,col));
+        mean_phase_differences = [mean_phase_differences;mean([diff(matrix2plot)' ones(size(matrix2plot,2),1)*an], 'omitmissing')];
+        concatenated_phase_differences = [concatenated_phase_differences;[diff(matrix2plot)' ones(size(matrix2plot,2),1)*an]];
+
+
+    semilogy((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,':k')
+    hold on
+    semilogy((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,'.k', 'MarkerSize',3)
+
+    semilogy([1 2]',mean(matrix2plot,2, 'omitmissing'),'_r', 'MarkerSize',4, 'LineWidth',3)
+    if all(any(isnan(matrix2plot),1))
+        p = 1;
+    else
+          [p,h,t] = signrank(matrix2plot(1,:)',matrix2plot(2,:)');
+          % [h,p] = ttest(matrix2plot(1,:)',matrix2plot(2,:)');
+    end
+    ylim(y_lim)
+    title([area_list{an},  ' ', num2str(p)])
+end
+%%
+
+
+figure;
+subplot(15,1,1)
+bar(entreinment_per_partner(:,6))
+xticks(1:numel(area_list))
+xticklabels(area_list)
+axis tight
+
+subplot(15,1,2:5)
+bar(entreinment_per_partner(:,1:5), 'stacked')
+xticks(1:numel(area_list))
+xticklabels(area_list)
+axis tight
+legend({'Both Partners','Only Partner1','Only Partner2','Generally PL','Not PL'})
+
+subplot(3,1,2)
+swarmchart(concatenated_phase_differences(:,2), concatenated_phase_differences(:,1), 'k.')
+hold on
+plot(mean_phase_differences(:,2),mean_phase_differences(:,1), '_r')
+
+plot([0 numel(area_list)+1], [0 0], 'r')
+xticks(1:numel(area_list))
+xticklabels(area_list)
+xlim tight
+ylim([-.1 .1])
+
+
+
+subplot(3,1,3)
+
+swarmchart(concatenated_rate_differences(:,2), concatenated_rate_differences(:,1), 'k.')
+hold on
+plot(mean_rate_differences(:,2),mean_rate_differences(:,1), '_r')
+
+plot([0 numel(area_list)+1], [0 0], 'r')
+xticks(1:numel(area_list))
+xticklabels(area_list)
+xlim tight
+ylim([-100 100])
+
+%%
+
+%%
+
+area_list = {'SupCol'};
+
+figure
+col = 4;
+    subplot(1,2,1)
+    index = strcmp(all_neurons.area, area_list{1});
+    x_jit = (rand(sum(index),2) -.5)*.25;
+
+     matrix2plot = squeeze(all_session_phase_stats(:,index,col));
+    plot((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,':k')
+    hold on
+    plot((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,'.k', 'MarkerSize',3)
+
+    plot([1 2]',mean(matrix2plot, 2,'omitmissing'),'_r', 'MarkerSize',4)
+    plot([1 2]',mean(matrix2plot, 2,'omitmissing'),'r', 'LineWidth',3)
+
+    if all(any(isnan(matrix2plot),1))
+        p = 1;
+    else
+        [p,h,t] = signrank(matrix2plot(1,:)',matrix2plot(2,:)');
+    end
+    ylim([-.25 .25])
+    title([area_list{1},  ' ', num2str(p)])
+
+    col = 6;
+    subplot(1,2,2)
+    matrix2plot = squeeze(all_session_phase_stats(:,index,col))-repmat(all_neurons.fr(index)',2,1);
+    plot((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,':k')
+    hold on
+    plot((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,'.k', 'MarkerSize',3)
+    plot([1 2]',mean(matrix2plot, 2,'omitmissing'),'r', 'LineWidth',3)
+
+   
+    plot([1 2]',mean(matrix2plot,2, 'omitmissing'),'_r', 'MarkerSize',4)
+    if all(any(isnan(squeeze(all_session_phase_stats(:,index,col))),1))
+        p = 1;
+    else
+        [p,h,t] = signrank(matrix2plot(1,:), matrix2plot(2,:))
+    end
+    ylim([-5 5])
+    title([area_list{1},  ' ', num2str(p)])
+
+
+
+
+%%
+figure
+z_score_limit = 1;
+index2include = abs(zscore(concatenated_rate_differences(:,1)))<z_score_limit & abs((concatenated_phase_differences(:,1) - mean(concatenated_phase_differences(:,1), 'omitmissing'))/std(concatenated_phase_differences(:,1), 'omitmissing'))<z_score_limit;
+plot(concatenated_rate_differences(index2include,1), concatenated_phase_differences(index2include,1), 'k.')
+no_nan = ~any(isnan([concatenated_rate_differences(:,1) concatenated_phase_differences(:,1)]),2);
+[c,p]=corr(concatenated_rate_differences(no_nan & index2include,1), concatenated_phase_differences(no_nan & index2include,1))
+xlabel('% Rate Change (Partner2 - Partner1)')
+ylabel('PPC change (Partner2 - Partner1)')
+
+
+%% entreinment per region
+
+%% delta and theta comparisson
+
+load([saving_folder,'\theta_all_neurons.mat'],'all_neurons');
+all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
+all_neurons_theta = all_neurons;
+load([saving_folder,'\delta_all_neurons.mat'],'all_neurons');
+all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
+all_neurons_delta = all_neurons;
+
+
+theta_partner_1 = all_neurons_theta.Partner1.Pval;
+
+
+
+alpha = 0.01;
+
+
+% area_list = unique(all_neurons.area)';
+
+% area_list =  {'4N'	'DLPAG'	'DMPAG'	'DR'	'InfCol'	'LPAG'	'LSD'	'LSI'	'SupCol'	'VLPAG'	'isRt'	'mlf'};
+
+area_list = {'DLPAG'	'DMPAG'	'DR'	'InfCol'	'LPAG'		'SupCol'	'VLPAG'	'isRt'	'mlf'};
+
+
+percentages_partner_1 = zeros(numel(area_list),4);
+percentages_partner_2 = zeros(numel(area_list),4);
+
+
+for an=1:numel(area_list) 
+    index = strcmp(all_neurons.area, area_list{an});
+    percentages_partner_1(an,1) = sum(all_neurons_theta.Partner1.Pval(index)<alpha & all_neurons_delta.Partner1.Pval(index)>alpha)/sum(~isnan(all_neurons_theta.Partner1.Pval(index)));
+    percentages_partner_1(an,2) = sum(all_neurons_delta.Partner1.Pval(index)<alpha & all_neurons_theta.Partner1.Pval(index)>alpha)/sum(~isnan(all_neurons_delta.Partner1.Pval(index)));
+    percentages_partner_1(an,3) =  sum(all_neurons_delta.Partner1.Pval(index)<alpha & all_neurons_theta.Partner1.Pval(index)<alpha)/sum(~isnan(all_neurons_delta.Partner1.Pval(index)));
+
+    percentages_partner_2(an,1) = sum(all_neurons_theta.Partner2.Pval(index)<alpha & all_neurons_delta.Partner2.Pval(index)>alpha)/sum(~isnan(all_neurons_theta.Partner2.Pval(index)));
+    percentages_partner_2(an,2) = sum(all_neurons_delta.Partner2.Pval(index)<alpha & all_neurons_theta.Partner2.Pval(index)>alpha)/sum(~isnan(all_neurons_delta.Partner2.Pval(index)));
+    percentages_partner_2(an,3) =  sum(all_neurons_delta.Partner2.Pval(index)<alpha & all_neurons_theta.Partner2.Pval(index)<alpha)/sum(~isnan(all_neurons_delta.Partner2.Pval(index)));
+end
+
+
+
+
+
+percentages_partner_1(:,4) = 1-sum(percentages_partner_1,2);
+percentages_partner_2(:,4) = 1-sum(percentages_partner_2,2);
+
+
+figure
+subplot(1,2,1)
+bar(percentages_partner_1, 'stacked')
+xticks(1:numel(area_list))
+xticklabels(area_list)
+
+
+subplot(1,2,2)
+bar(percentages_partner_2, 'stacked')
+xticks(1:numel(area_list))
+xticklabels(area_list)
+
+
+
+
+
+
+

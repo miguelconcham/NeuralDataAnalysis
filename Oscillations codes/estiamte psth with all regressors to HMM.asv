@@ -1,0 +1,869 @@
+
+
+
+list_of_animals = {'B1D1 1013 Dual','B1S3 1008 Single','B1S3 1009 Single','B2S2 1110 Single2','B2S2 1111 Single2','B3D2 1130 Dual','B4S2 0825 Single'};
+list_of_paertner = {[1 2],[1 2],[1 2],[1 2],[1 2],[1 2],[1 2 3]};
+
+
+saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
+
+f          = 4:.1:15;      % frequency range for spectrogram
+freq_range = [6 12]; 
+% 
+% f          = .01:.05:7;      % frequency range for spectrogram
+% freq_range = [.1 6]; 
+n_strctut = 1;
+wrapped_bins = 100; % hard coded in function
+psth_structure = [];
+animal_names = [];
+%%
+for fn = 1:numel(list_of_animals)
+
+    for pt = list_of_paertner{fn}
+        disp([list_of_animals{fn} , ' P', num2str(pt)])
+
+        if fn==1 && pt==1
+            psth_structure = GENERATE_THETA_CALL_LOC_REGRESSOR_HMM(list_of_animals{fn}, pt, f, freq_range)
+            n_strctut = n_strctut+numel(psth_structure);
+            animal_names = [animal_names;[repmat({list_of_animals{fn}},numel(psth_structure),1), repmat({pt},numel(psth_structure),1),num2cell(1:numel(psth_structure))']]
+        else
+
+            transt_psth = GENERATE_THETA_CALL_LOC_REGRESSOR_HMM(list_of_animals{fn}, pt, f, freq_range)
+
+            for sub_j=1:numel(transt_psth)
+
+                psth_structure(n_strctut) = transt_psth(sub_j);
+                n_strctut = n_strctut+1;
+            end
+            animal_names = [animal_names;[repmat({list_of_animals{fn}},numel(transt_psth),1), repmat({pt},numel(transt_psth),1), num2cell(1:numel(transt_psth))' ]]
+
+        end
+
+    end
+
+
+end
+%% saving
+disp('SAVING')
+save([saving_folder,'\psth_structure_all_regressors_theta_hmm.mat'],'psth_structure', '-v7.3');
+save([saving_folder,'\animal_names_all_regressorss_theta_hmm.mat'],'animal_names');
+%% stacking data
+
+% List of array variables to stack
+varNames = { ...
+     'state_onset', 'state_offset', ...
+    'state_onset_regressor', 'state_offset_regressor',...
+    'play_bout_onset_regressor', 'play_bout_offset_regressor', ...
+    'call_onset_regressor', 'call_offset_regressor', ...
+    'self_speed_onset_regressor', 'self_speed_offset_regressor', ...
+    'self_acc_onset_regressor', 'self_acc_offset_regressor', ...
+    'other_speed_onset_regressor', 'other_speed_offset_regressor', ...
+    'animal_distance_onset_regressor', 'animal_distance_offset_regressor', ...
+    'other_acc_onset_regressor', 'other_acc_offset_regressor', ...
+    'self_onset_regressor', 'self_offset_regressor', ...
+    'other_onset_regressor', 'other_offset_regressor', ...
+    'play_bouts_table', 'hmm_onset_offset','hmm_type',...
+    'time_wrapped','play_bout_latency' };
+vars2zscore = {'self_speed_onset_regressor','self_speed_offset_regressor',...
+    'animal_distance_onset_regressor', 'animal_distance_offset_regressor', ...
+    'self_acc_onset_regressor','self_acc_offset_regressor',...
+    'other_speed_onset_regressor', 'other_speed_offset_regressor', ...
+    'other_acc_onset_regressor', 'other_acc_offset_regressor'};
+
+% Initialize stacking container
+stacked_data = struct();
+for v = 1:numel(varNames)
+    stacked_data.(varNames{v}) = [];
+end
+stacked_data.meta = {};  % {animal_name, partner_id, channel, play_length}
+
+% Loop through each session
+for i = 1:numel(psth_structure)
+    S = psth_structure(i);
+
+    % Get session info from parallel cell array
+    animal_name = animal_names{i,1};
+    partner_id  = animal_names{i,2};
+    ch          = animal_names{i,3};
+
+    % Compute play lengths
+    hmm_lengths = S.hmm_onset_offset(:,2) - S.hmm_onset_offset(:,1);
+    nRows = size(S.state_onset,1);
+
+    % Stack all variables
+    for v = 1:numel(varNames)
+
+        if ismember(varNames{v}, vars2zscore)
+            array = S.(varNames{v});
+            array = (array - repmat(mean(S.(varNames{v})(:), 'omitmissing'), size(array,1), size(array,2)))./repmat(std(S.(varNames{v})(:), 'omitmissing'), size(array,1), size(array,2));
+            stacked_data.(varNames{v}) = [stacked_data.(varNames{v}); array];
+        else
+            stacked_data.(varNames{v}) = [stacked_data.(varNames{v}); S.(varNames{v})];
+        end
+    end
+
+    % Add metadata rows
+    session_meta = [ ...
+        repmat({animal_name}, nRows, 1), ...
+        num2cell(repmat(partner_id, nRows, 1)), ...
+        num2cell(repmat(ch, nRows, 1)), ...
+        num2cell(hmm_lengths) ...
+        ];
+    stacked_data.meta = [stacked_data.meta; session_meta];
+end
+
+%%
+bin_size = psth_structure(1).wind_length - psth_structure(1).wind_overlap;
+time = psth_structure(1).hist_range(1):bin_size:psth_structure(1).hist_range(2);
+baseline_index = time<0;
+
+hmm_lengths = [stacked_data.meta{:,4}]';
+
+[hmm_lengths, order_index] = sort(hmm_lengths);
+
+
+
+pow_matrix = stacked_data.state_onset;
+
+for j=1:size(pow_matrix,1)
+    pow_matrix(j,:) = (pow_matrix(j,:) - mean(pow_matrix(j, baseline_index), 'omitmissing'))/std(pow_matrix(j, baseline_index), 'omitmissing');
+    pow_matrix(j,:)  = movmean( pow_matrix(j,:),.125/bin_size, 'omitmissing');
+    pow_matrix(j,time>hmm_lengths(j)) = NaN;
+end
+
+
+
+%%
+x_lim = [-1 2];
+
+hmm_lengths = [stacked_data.meta{:,4}]';
+expanded_regressor = expand_half_intervals(stacked_data.state_onset_regressor);
+
+figure
+bin_size =  psth_structure(1).wind_length -  psth_structure(1).wind_overlap;
+time = psth_structure(1).hist_range(1):bin_size:psth_structure(1).hist_range(2);
+baseline_index = time<0;
+
+
+
+[sorted_play_bout_length, order_index] = sort(hmm_lengths);
+
+
+
+pow_matrix = stacked_data.state_onset;
+
+for j=1:size(pow_matrix,1)
+    pow_matrix(j,:) = (pow_matrix(j,:) - mean(pow_matrix(j, baseline_index), 'omitmissing'))/std(pow_matrix(j, baseline_index), 'omitmissing');
+    pow_matrix(j,:)  = movmean( pow_matrix(j,:),.125/bin_size, 'omitmissing');
+end
+
+array = pow_matrix;
+array(expanded_regressor==0) = NaN;
+pow_regressor = array(:);
+
+subplot(5,6,1:6:6*3)
+pcolor(time, 1:numel(sorted_play_bout_length), array(order_index,:))
+shading flat
+hold on
+plot((1:numel(sorted_play_bout_length))*0, 1:numel(sorted_play_bout_length), 'w')
+plot(sorted_play_bout_length, 1:numel(sorted_play_bout_length), 'w')
+axis xy
+xlim([-2 2])
+clim([-1 2])
+subplot(5,6,(6*3+ 1):6:6*5)
+plot(time, mean(array, 'omitmissing'))
+xlim([-1 2])
+
+
+
+array = stacked_data.self_speed_onset_regressor;
+array(expanded_regressor==0) = NaN;
+self_speed_regressor = array(:);
+subplot(5,6,(1:6:6*3)  +1)
+pcolor(time, 1:numel(sorted_play_bout_length), array(order_index,:))
+shading flat
+hold on
+plot((1:numel(sorted_play_bout_length))*0, 1:numel(sorted_play_bout_length), 'w')
+plot(sorted_play_bout_length, 1:numel(sorted_play_bout_length), 'w')
+axis xy
+xlim([-2 2])
+subplot(5,6,((6*3+ 1):6:6*5) + 1)
+plot(time, mean(array, 'omitmissing'))
+xlim(x_lim)
+
+
+array = stacked_data.other_speed_onset_regressor;
+array(expanded_regressor==0) = NaN;
+other_speed_regressro   = array(:);
+subplot(5,6,(1:6:6*3)  +2)
+pcolor(time, 1:numel(sorted_play_bout_length), array(order_index,:))
+shading flat
+hold on
+plot((1:numel(sorted_play_bout_length))*0, 1:numel(sorted_play_bout_length), 'w')
+plot(sorted_play_bout_length, 1:numel(sorted_play_bout_length), 'w')
+axis xy
+xlim([-2 2])
+subplot(5,6,((6*3+ 1):6:6*5) + 2)
+plot(time, mean(array, 'omitmissing'))
+xlim([-2 2])
+
+array = stacked_data.self_acc_onset_regressor    ;
+array(~expanded_regressor) = NaN;
+self_behavior_regressor  = array(:);;
+subplot(5,6,(1:6:6*3)  +3)
+pcolor(time, 1:numel(sorted_play_bout_length), array(order_index,:))
+shading flat
+hold on
+plot((1:numel(sorted_play_bout_length))*0, 1:numel(sorted_play_bout_length), 'w')
+plot(sorted_play_bout_length, 1:numel(sorted_play_bout_length), 'w')
+axis xy
+xlim([-2 2])
+subplot(5,6,((6*3+ 1):6:6*5) + 3)
+plot(time, mean(array, 'omitmissing'))
+xlim([-2 2])
+
+
+
+
+array = stacked_data.other_acc_onset_regressor;
+array(~expanded_regressor) = NaN;
+other_behavior_regressor  = array(:);
+subplot(5,6,(1:6:6*3)  +4)
+pcolor(time, 1:numel(sorted_play_bout_length), array(order_index,:))
+shading flat
+hold on
+plot((1:numel(sorted_play_bout_length))*0, 1:numel(sorted_play_bout_length), 'w')
+plot(sorted_play_bout_length, 1:numel(sorted_play_bout_length), 'w')
+axis xy
+xlim([-2 2])
+subplot(5,6,((6*3+ 1):6:6*5) + 4)
+plot(time, mean(array, 'omitmissing'))
+xlim([-2 2])
+
+
+
+call_matrix = stacked_data.call_onset_regressor;
+
+for j=1:size(pow_matrix,1)
+    call_matrix(j,:)  = movmean( call_matrix(j,:),.2/bin_size, 'omitmissing');
+end
+
+array = call_matrix;
+array(~expanded_regressor) = NaN;
+call_regressor =   array(:);
+subplot(5,6,(1:6:6*3)  +5)
+pcolor(time, 1:numel(sorted_play_bout_length), array(order_index,:))
+shading flat
+hold on
+plot((1:numel(sorted_play_bout_length))*0, 1:numel(sorted_play_bout_length), 'w')
+plot(sorted_play_bout_length, 1:numel(sorted_play_bout_length), 'w')
+axis xy
+xlim([-2 2])
+subplot(5,6,((6*3+ 1):6:6*5) + 5)
+plot(time, smoothdata(mean(array, 'omitmissing'),50, 'movmedian'))
+xlim([-2 2])
+
+array = repmat(stacked_data.meta(:,1),1, size(stacked_data.call_onset_regressor,2));
+array(~expanded_regressor) = {'NaN'};
+animal_name = categorical(array);
+
+array = repmat(stacked_data.meta(:,3),1, size(stacked_data.call_onset_regressor,2));
+array = cell2mat(array);
+array(~expanded_regressor) = NaN;
+channel_num = array;
+
+
+
+array = stacked_data.other_acc_onset_regressor;
+array(expanded_regressor==0) = NaN;
+other_acc_regressro   = array(:);
+
+
+array = stacked_data.animal_distance_onset_regressor;
+array(expanded_regressor==0) = NaN;
+animal_dist_regressro   = array(:);
+
+
+array = stacked_data.self_acc_onset_regressor;
+array(expanded_regressor==0) = NaN;
+slef_acc_regressro   = array(:);
+
+array = repmat(hmm_type, 1,size(stacked_data.state_onset,2));
+array(expanded_regressor==0) = NaN;
+state_type = array(:);
+
+
+regressor_table = table(call_regressor,other_behavior_regressor, self_behavior_regressor,...
+    other_speed_regressro,self_speed_regressor,other_acc_regressro,slef_acc_regressro, ...
+    state_type,animal_name(:),channel_num(:), animal_dist_regressro,pow_regressor, ...
+    'VariableNames', {'Call','Other','Self','OtherSpeed','SelfSpeed','OtherAcc','SelfAcc','StateType','Animal','ChannelNum','AnimalDist','Power'});
+predictors = {'Call','SelfSpeed','OtherSpeed','OtherAcc','SelfAcc','StateType','AnimalDist'};
+
+regressor_table(any(isnan(regressor_table{:,predictors}),2),:) = [];
+
+%% plot tytwo types of hmm
+
+bin_size =  psth_structure(1).wind_length -  psth_structure(1).wind_overlap;
+time = psth_structure(1).hist_range(1):bin_size:psth_structure(1).hist_range(2);
+baseline_index = time<0;
+
+
+
+
+figure
+
+    x_lim = [-.5 2];
+
+hmm_lengths                 = [stacked_data.meta{:,4}]';
+hmm_type                    = stacked_data.hmm_type;
+[sorted_play_bout_length, order_index] = sort(hmm_lengths);
+sorted_hmm_type             = hmm_type(order_index)==1;
+pow_matrix = stacked_data.state_onset;
+current_hmm = stacked_data.state_onset_regressor;
+only_baseline_effect =  expanded_regressor;
+
+
+
+
+
+for j=1:size(pow_matrix,1)
+    current_hmm(j,time<0) = 0;
+    only_baseline_effect(j,time>hmm_lengths(j)) = 0;
+    current_hmm(j,time>hmm_lengths(j)) = 0;
+    pow_matrix(j,:) = (pow_matrix(j,:) - mean(pow_matrix(j, baseline_index), 'omitmissing'))/std(pow_matrix(j, baseline_index), 'omitmissing');
+    pow_matrix(j,:)  = movmean( pow_matrix(j,:),.125/bin_size, 'omitmissing');
+end
+
+
+
+
+array = pow_matrix;
+% array(expanded_regressor==0) = NaN;
+% array(current_hmm==0) = NaN;
+arra(only_baseline_effect==0) = NaN;
+
+array4mixed_model = array;
+
+ci_state_play       = nan(2,size(pow_matrix,2));
+ci_state_no_play    = nan(2,size(pow_matrix,2));
+for t=1:size(pow_matrix,2)
+
+    [~, ~, ci] = ttest(array(hmm_type==1,t));
+    ci_state_play(:,t) = ci;
+    [~, ~, ci] = ttest(array(hmm_type==0,t));
+    ci_state_no_play(:,t) = ci;
+end
+
+
+
+subplot(5,2,[1 3 5])
+pcolor(time, 1:sum(sorted_hmm_type), array(order_index(sorted_hmm_type),:))
+shading flat
+hold on
+plot((1:sum(sorted_hmm_type))*0, 1:numel(sorted_play_bout_length(sorted_hmm_type)), 'w')
+plot(sorted_play_bout_length(sorted_hmm_type), 1:numel(sorted_play_bout_length(sorted_hmm_type)), 'w')
+axis xy
+xlim(x_lim)
+clim([-1 2])
+subplot(5,2,[7 9])
+plot(time, mean(array(order_index(sorted_hmm_type),:), 'omitmissing'))
+xlim(x_lim)
+
+
+subplot(5,2,[1 3 5]+1)
+pcolor(time, 1:sum(~sorted_hmm_type), array(order_index(~sorted_hmm_type),:))
+shading flat
+hold on
+plot((1:sum(~sorted_hmm_type))*0, 1:numel(sorted_play_bout_length(~sorted_hmm_type)), 'w')
+plot(sorted_play_bout_length(~sorted_hmm_type), 1:numel(sorted_play_bout_length(~sorted_hmm_type)), 'w')
+axis xy
+xlim(x_lim)
+clim([-1 2])
+subplot(5,2,[7 9]+1)
+plot(time, mean(array(order_index(~sorted_hmm_type),:), 'omitmissing'))
+xlim(x_lim)
+
+%% play state vs non play state
+
+figure
+no_nan = ~any(isnan(ci_state_play));
+fill([time(no_nan), fliplr(time(no_nan))], [ci_state_play(1, no_nan), fliplr(ci_state_play(2, no_nan))], 'r', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(time, mean(array(hmm_type==1,:), 'omitmissing'), 'r')
+
+
+no_nan = ~any(isnan(ci_state_no_play));
+fill([time(no_nan), fliplr(time(no_nan))], [ci_state_no_play(1, no_nan), fliplr(ci_state_no_play(2, no_nan))], 'k', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(time, mean(array(hmm_type==0,:), 'omitmissing'), 'k')
+xlim(x_lim)
+ylim tight
+
+%%
+
+animal_name_list = unique(stacked_data.meta(:,1));
+
+
+mean_per_animal_play    = nan(numel(animal_name_list),size(array,2));
+mean_per_animal_noplay  = nan(numel(animal_name_list),size(array,2));
+
+animal_index = nan(size(array,1),1);
+for an = 1:numel(animal_name_list)
+    
+    index = hmm_type==1 & ismember(stacked_data.meta(:,1),animal_name_list{an});
+    animal_index(ismember(stacked_data.meta(:,1),animal_name_list{an}))=an;
+    mean_per_animal_play(an,:) = mean(array(index,:), 'omitmissing');
+    index = hmm_type==0 & ismember(stacked_data.meta(:,1),animal_name_list{an});
+    mean_per_animal_noplay(an,:) = mean(array(index,:), 'omitmissing');
+end
+
+figure
+plot(time,mean_per_animal_play-mean_per_animal_noplay, ':r')
+hold on
+plot(time,mean(mean_per_animal_play-mean_per_animal_noplay, 'omitmissing'), 'r')
+[~, ~, ci] = ttest(mean_per_animal_play-mean_per_animal_noplay);
+no_nan = ~any(isnan(ci));
+fill([time(no_nan) fliplr(time(no_nan))],[ci(1,no_nan) fliplr(ci(2,no_nan))],'r', 'FaceAlpha',.25, 'EdgeColor','none')
+xlim(x_lim)
+
+
+
+
+
+
+%% EStimate each varaible contribution
+
+% Parameters
+k = 30; % number of folds
+cv = cvpartition(height(regressor_table), 'KFold', k);
+
+predictors = {'Call','SelfSpeed','OtherSpeed','OtherAcc','SelfAcc','StateType', 'AnimalDist'};
+
+% Full model formula
+formula_full = 'Power ~ Call + SelfSpeed + OtherSpeed + OtherAcc + SelfAcc + StateType + AnimalDist + (1|Animal)';
+
+% Prepare structure to store fold errors
+cvResults = struct();
+
+% Compute full model MSEs & R2 once
+mse_full_allfolds = zeros(k,1);
+r2_full_allfolds = zeros(k,1);
+varY_allfolds = zeros(k,1);
+
+for fold = 1:k
+    trainIdx = training(cv, fold);
+    testIdx = test(cv, fold);
+    trainData = regressor_table(trainIdx,:);
+    testData = regressor_table(testIdx,:);
+    fullModel = fitlme(trainData, formula_full);
+    yPred = predict(fullModel, testData);
+    yTrue = testData.Power;
+
+    mse_full_allfolds(fold) = mean((yTrue - yPred).^2, 'omitmissing');
+    varY_allfolds(fold) = var(yTrue, 'omitnan'); % variance of true test data
+    r2_full_allfolds(fold) = 1 - mse_full_allfolds(fold)/varY_allfolds(fold);
+end
+avgMSE_full = mean(mse_full_allfolds);
+avgR2_full = mean(r2_full_allfolds);
+
+fprintf('Full model average CV MSE: %.6f, average R²: %.6f\n\n', avgMSE_full, avgR2_full);
+
+% Loop over predictors to remove one at a time
+for i = 1:numel(predictors)
+    toRemove = predictors{i};
+    fprintf('Testing predictor removal: %s\n', toRemove);
+    
+    if i==1
+        pattern = ['(\s*\+\s*)?' toRemove '(\s*\+\s*)?'];
+        formula_reduced = regexprep(formula_full, pattern, '');
+        formula_reduced = regexprep(formula_reduced, '^\s*\+\s*', '');    
+        formula_reduced = regexprep(formula_reduced, '\s*\+\s*$', '');    
+        formula_reduced = regexprep(formula_reduced, '\s*\+\s*\+', ' + '); 
+        formula_reduced = strtrim(formula_reduced);
+    else
+        formula_reduced = regexprep(formula_full, ['\s*\+\s*' toRemove], '');
+    end
+    
+    mse_reduced_allfolds = zeros(k,1);
+    r2_reduced_allfolds = zeros(k,1);
+    
+    for fold = 1:k
+        trainIdx = training(cv, fold);
+        testIdx = test(cv, fold);
+        trainData = regressor_table(trainIdx,:);
+        testData = regressor_table(testIdx,:);
+
+        reducedModel = fitlme(trainData, formula_reduced);
+        yPred = predict(reducedModel, testData);
+        yTrue = testData.Power;
+
+        mse_reduced_allfolds(fold) = mean((yTrue - yPred).^2, 'omitmissing');
+        r2_reduced_allfolds(fold) = 1 - mse_reduced_allfolds(fold)/varY_allfolds(fold); % same test set variance
+    end
+
+    avgMSE_reduced = mean(mse_reduced_allfolds);
+    avgR2_reduced = mean(r2_reduced_allfolds);
+
+    deltaMSE_folds = mse_reduced_allfolds - mse_full_allfolds;
+    deltaR2_folds = r2_full_allfolds - r2_reduced_allfolds;
+
+    fprintf('  Average MSE increase: %.6f, Average ΔR²: %.6f\n\n', avgMSE_reduced - avgMSE_full, avgR2_full - avgR2_reduced);
+
+    % Store results for visualization
+    cvResults.(toRemove).mse_full = mse_full_allfolds;
+    cvResults.(toRemove).mse_reduced = mse_reduced_allfolds;
+    cvResults.(toRemove).delta_mse = deltaMSE_folds;
+    cvResults.(toRemove).avg_delta_mse = avgMSE_reduced - avgMSE_full;
+
+    cvResults.(toRemove).r2_full = r2_full_allfolds;
+    cvResults.(toRemove).r2_reduced = r2_reduced_allfolds;
+    cvResults.(toRemove).delta_r2 = deltaR2_folds;
+    cvResults.(toRemove).avg_delta_r2 = avgR2_full - avgR2_reduced;
+end
+
+% Store global info
+cvResults.k = k;
+cvResults.mse_full_allfolds = mse_full_allfolds;
+cvResults.r2_full_allfolds = r2_full_allfolds;
+cvResults.predictors = predictors;
+
+%% save result
+
+save([saving_folder,'\cvResults_mean_calls_theta_states.mat'],'cvResults')
+
+%% plot contribution
+y_for_sig = .02;
+figure
+hold on
+randx = .25*(rand(k,2)-.5);
+re_order = [2 3 5 4 6 1 7];
+p_vals = nan(numel(re_order),1);
+for j=1:numel(predictors)
+
+    ms_full = 100*cvResults.(predictors{re_order(j)}).mse_full/avgMSE_full  - 100;
+    ms_reduced = 100*cvResults.(predictors{re_order(j)}).mse_reduced/avgMSE_full  - 100;
+    % plot([2*j-1 2*j], mean([ms_full,ms_reduced]), 'r', 'LineWidth',2)
+    % hold on
+    % plot([2*j-1 2*j], mean([ms_full,ms_reduced]), '.r', 'MarkerSize', 20)
+    % 
+    % plot((repmat([2*j-1 2*j],k,1) + randx)', [ms_full,ms_reduced]', ':k');
+    % plot((repmat([2*j-1 2*j],k,1) + randx)', [ms_full,ms_reduced]', '.k', 'MarkerSize', 10);
+    swarmchart((2*j-1)*ones(k,1),ms_full-ms_reduced, '.' )
+    plot((2*j-1), mean(ms_full-ms_reduced), '_r')
+  
+
+     
+         [~,p_val,stats] = ttest(ms_full-ms_reduced);
+  
+     p_val = p_val*6;
+    if p_val<0.001
+        text(2*j -1, y_for_sig, '* * *')
+    elseif p_val<0.01
+        text(2*j -1, y_for_sig, ' * * ')
+    elseif p_val<0.05
+        text(2*j -1, y_for_sig, '  *  ')
+    else
+        text(2*j -1, y_for_sig, ' n.s ')
+    end
+p_vals(re_order(j)) = p_val;
+
+    text(2*j -1, y_for_sig,  num2str(p_val), 'Rotation',45)
+
+
+
+end
+plot([0 2*numel(predictors)], [0 0], 'k')
+xticks(1:2:2*numel(predictors))
+xticklabels(predictors(re_order))
+
+ylim([-.8 y_for_sig+.1])
+
+
+%%
+alpha = 0.05;
+[cluster_pvals, clusters, cluster_stats, perm_max_stats] = cluster_perm_test(array(hmm_type==1,:), array(hmm_type==0,:), alpha, 500);
+
+save([saving_folder,'\cluster_pvals.mat'],'cluster_pvals','clusters','cluster_stats','perm_max_stats', 'array', 'hmm_type','alpha', 'time')
+%% ploting cluster statistics
+data1 = array(hmm_type==1,:);
+data2 =  array(hmm_type==0,:);
+    mean_diff = mean(data1,1) - mean(data2,1);
+
+    figure; hold on;
+    plot(time, mean_diff, 'k', 'LineWidth', 1.5);
+    xlabel('Time');
+    ylabel('Mean difference (data1 - data2)');
+    title('Cluster-based permutation test results');
+    
+    % Highlight significant clusters
+    sig_clusters = find(cluster_pvals < alpha);
+    ylims = ylim;
+    
+    for i = 1:length(sig_clusters)
+        cluster_idx = clusters{sig_clusters(i)};
+        % Draw a patch (shaded area) over the cluster time points
+        patch([time(cluster_idx(1)) time(cluster_idx(end)) time(cluster_idx(end)) time(cluster_idx(1))], ...
+              [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+              [0.9 0.9 0.9], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+    end
+    
+    % Plot the mean difference again so it is on top
+    plot(time, mean_diff, 'k', 'LineWidth', 1.5);
+    
+    legend({'Mean difference','Significant cluster'}, 'Location', 'best');
+    hold off;
+
+
+%% estimating mixed model per time
+
+
+is_there_play  =  hmm_type==1;
+there_is_no_play =hmm_type==0;
+
+play_lengths    = hmm_lengths(is_there_play);
+noplay_lengths  = hmm_lengths(there_is_no_play);
+
+Cost = (play_lengths-noplay_lengths').^2;
+
+
+costUnmatched =4;
+
+
+figure
+p = 0;
+
+while p<0.05
+
+
+
+    M = matchpairs(Cost,costUnmatched); %first colum is withplay second column witohuhtplay
+
+
+    plot(play_lengths( M(:,1)), noplay_lengths( M(:,2)), '.')
+    pause(.1)
+
+    [h,p]= kstest2(play_lengths( M(:,1)), noplay_lengths( M(:,2)));
+    costUnmatched = costUnmatched/1.05;
+end
+
+%% save paired lengths
+save([saving_folder,'\paired_lengths_all_regressorss_theta_hmm.mat'],'M', 'play_lengths', 'noplay_lengths');
+
+%% ploting hmm with matched lengths
+
+
+
+
+    x_lim = [-.5 2];
+
+
+array = pow_matrix;
+
+array(only_baseline_effect==0) = NaN;
+
+array4mixed_model = array;
+
+ci_state_play       = nan(2,size(pow_matrix,2));
+ci_state_no_play    = nan(2,size(pow_matrix,2));
+index_play = find(hmm_type==1);
+index_play = index_play(M(:,1));
+
+index_noplay = find(hmm_type==0);
+index_noplay = index_noplay(M(:,2));
+for t=1:size(pow_matrix,2)
+
+   
+    [~, ~, ci] = ttest(array(index_play,t));
+    ci_state_play(:,t) = ci;
+
+    [~, ~, ci] = ttest(array(index_noplay,t));
+    ci_state_no_play(:,t) = ci;
+end
+
+
+figure
+subplot(5,2,[1 3 5])
+array_play = array(index_play,:);
+lenght_play = hmm_lengths(index_play);
+[sorted_length_play, order_play] = sort(lenght_play);
+pcolor(time, 1:numel(sorted_length_play), array_play(order_play,:))
+shading flat
+hold on
+plot((1:sum(sorted_hmm_type))*0, 1:numel(sorted_play_bout_length(sorted_hmm_type)), 'w')
+plot(sorted_play_bout_length(sorted_hmm_type), 1:numel(sorted_play_bout_length(sorted_hmm_type)), 'w')
+axis xy
+xlim(x_lim)
+clim([-1 2])
+subplot(5,2,[7 9])
+plot(time, mean(array_play, 'omitmissing'))
+xlim(x_lim)
+
+
+subplot(5,2,[1 3 5]+1)
+array_noplay = array(index_noplay,:);
+lenght_play = hmm_lengths(index_noplay);
+[sorted_length_noplay, order_noplay] = sort(lenght_play);
+pcolor(time, 1:numel(sorted_length_noplay), array_noplay(order_noplay,:))
+shading flat
+hold on
+plot((1:sum(~sorted_hmm_type))*0, 1:numel(sorted_play_bout_length(~sorted_hmm_type)), 'w')
+plot(sorted_play_bout_length(~sorted_hmm_type), 1:numel(sorted_play_bout_length(~sorted_hmm_type)), 'w')
+axis xy
+xlim(x_lim)
+clim([-1 2])
+subplot(5,2,[7 9]+1)
+plot(time, mean(array_noplay, 'omitmissing'))
+xlim(x_lim)
+
+%%
+
+
+figure
+no_nan = ~any(isnan(ci_state_play));
+fill([time(no_nan), fliplr(time(no_nan))], [ci_state_play(1, no_nan), fliplr(ci_state_play(2, no_nan))], 'r', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(time, mean(array_play, 'omitmissing'), 'r')
+
+
+no_nan = ~any(isnan(ci_state_no_play));
+fill([time(no_nan), fliplr(time(no_nan))], [ci_state_no_play(1, no_nan), fliplr(ci_state_no_play(2, no_nan))], 'k', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(time, mean(array_noplay, 'omitmissing'), 'k')
+xlim(x_lim)
+ylim tight
+
+%%
+
+alpha = 0.05;
+relevan_time = [-.25 2];
+time_index = time>=relevan_time(1) & time<=relevan_time(2);
+[cluster_pvals, clusters, cluster_stats, perm_max_stats] = cluster_perm_test(array_play(:,time_index), array_noplay(:,time_index), alpha, 1000);
+
+load([saving_folder,'\cluster_pvals_fixed_length.mat'],'cluster_pvals','clusters','cluster_stats','perm_max_stats', 'array_play', 'array_noplay','alpha', 'time','time_index','relevan_time')
+
+
+
+%% ploting cluster statistics
+data1 = array_play(:,time_index);
+data2 =  array_noplay(:,time_index);
+    mean_diff = mean(data1,1, 'omitmissing') - mean(data2,1, 'omitmissing');
+
+    figure; hold on;
+    sub_time= time(time_index);
+    plot(sub_time, mean_diff, 'k', 'LineWidth', 1.5);
+    xlabel('Time');
+    ylabel('Mean difference (data1 - data2)');
+    title('Cluster-based permutation test results');
+    
+    % Highlight significant clusters
+    sig_clusters = find(cluster_pvals < alpha);
+    ylims = ylim;
+    
+    for i = 1:length(sig_clusters)
+        cluster_idx = clusters{sig_clusters(i)};
+        % Draw a patch (shaded area) over the cluster time points
+        patch([sub_time(cluster_idx(1)) sub_time(cluster_idx(end)) sub_time(cluster_idx(end)) sub_time(cluster_idx(1))], ...
+              [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+              [0.9 0.9 0.9], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+    end
+    
+    % Plot the mean difference again so it is on top
+    plot(sub_time, mean_diff, 'k', 'LineWidth', 1.5);
+    
+    legend({'Mean difference','Significant cluster'}, 'Location', 'best');
+    hold off;
+
+
+    %%
+
+
+
+figure
+no_nan = ~any(isnan(ci_state_play));
+fill([time(no_nan), fliplr(time(no_nan))], [ci_state_play(1, no_nan), fliplr(ci_state_play(2, no_nan))], 'r', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(time, mean(array_play, 'omitmissing'), 'r')
+
+
+no_nan = ~any(isnan(ci_state_no_play));
+fill([time(no_nan), fliplr(time(no_nan))], [ci_state_no_play(1, no_nan), fliplr(ci_state_no_play(2, no_nan))], 'k', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(time, mean(array_noplay, 'omitmissing'), 'k')
+xlim(x_lim)
+ylim tight
+ylims = ylim;
+  
+    for i = 1:length(sig_clusters)
+        cluster_idx = clusters{sig_clusters(i)};
+        % Draw a patch (shaded area) over the cluster time points
+        patch([sub_time(cluster_idx(1)) sub_time(cluster_idx(end)) sub_time(cluster_idx(end)) sub_time(cluster_idx(1))], ...
+              [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+              [0.9 0.9 0.9], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+    end
+    
+    %% ploting time wrapped
+    hmm_type = stacked_data.hmm_type;
+bin_size =  psth_structure(1).wind_length -  psth_structure(1).wind_overlap;
+time = psth_structure(1).hist_range(1):bin_size:psth_structure(1).hist_range(2);
+pre_index = 1:round(-psth_structure(1).hist_range(1)/bin_size);
+pre_time =  (pre_index+psth_structure(1).hist_range(1)/bin_size)*bin_size;
+hmm_lengths = [stacked_data.meta{:,4}]';
+[sorted_play_bout_length, order] = sort(hmm_lengths);
+
+wrapped_time_between = linspace(1/wrapped_bins,1,wrapped_bins);
+wrapped_time_during = linspace(1 +1/wrapped_bins,2,wrapped_bins);
+
+wrapped_time = [pre_time,wrapped_time_between,wrapped_time_during];
+
+
+wrapped_bins = 100; %% had coded in fucntion 
+pow_matrix_tw = stacked_data.time_wrapped;
+baseline_index_tw = wrapped_time<0;
+
+
+for j=1:size(pow_matrix_tw,1)
+    pow_matrix_tw(j,:) = (pow_matrix_tw(j,:) - mean(pow_matrix_tw(j, baseline_index_tw), 'omitmissing'))/std(pow_matrix_tw(j, baseline_index_tw), 'omitmissing');
+    pow_matrix_tw(j,:)  = movmean( pow_matrix_tw(j,:),.125/bin_size, 'omitmissing');
+end
+
+
+index_all_conditions = ~any(isnan(pow_matrix_tw(:,wrapped_time>=0 )),2);
+index_all_conditions =  stacked_data.play_bout_latency(:,1) >stacked_data.play_bout_latency(:,2)
+% index_all_conditions = hmm_type ==1;
+
+figure
+subplot(5,1,1:2)
+matrix2plot_with_play = pow_matrix_tw(index_all_conditions,:);
+hmm_lenght_all_conditions = hmm_lengths(index_all_conditions);
+[sorted_play_bout_length_all_cond, order_all_cond] = sort(hmm_lenght_all_conditions);
+imagesc(wrapped_time, 1:size(matrix2plot_with_play,1), matrix2plot_with_play(order_all_cond,:))
+xlim([-2 2])
+clim([-2 3])
+axis xy
+
+subplot(5,1,3:5)
+index_all_conditions = stacked_data.play_bout_latency(:,1) >stacked_data.play_bout_latency(:,2);
+matrix2plot_without_play = pow_matrix_tw(index_all_conditions,:);
+
+
+[~, ~, ci] = ttest(matrix2plot_without_play);
+no_nan = ~any(isnan(ci));
+
+fill([wrapped_time(no_nan), fliplr(wrapped_time(no_nan))], [ci(1,no_nan) fliplr(ci(2, no_nan))], 'k', 'FaceAlpha', .25, 'EdgeColor', 'none')
+hold on
+plot(wrapped_time, mean(matrix2plot_without_play, 'omitmissing'), 'k')
+xlim([-2 2])
+
+
+[~, ~, ci] = ttest(matrix2plot_with_play);
+no_nan = ~any(isnan(ci));
+
+fill([wrapped_time, fliplr(wrapped_time)], [ci(1,no_nan) fliplr(ci(2, no_nan))], 'r', 'FaceAlpha', .25, 'EdgeColor', 'none')
+hold on
+plot(wrapped_time, mean(matrix2plot_with_play, 'omitmissing'), 'r')
+xlim([-2 2])
+
+
+
+
+

@@ -1,0 +1,99 @@
+animal_list = dir;
+animal_list(1:2)= [];
+
+stack_lm_pow_structure = [];
+
+an = 1;
+current_dir =  [animal_list(an).folder, '\',animal_list(an).name];
+aux = LFP_SPEED_POW_ANALYSIS(current_dir);
+
+for j=1:numel(aux)
+aux(j).animal = animal_list(1).name;
+end
+
+stack_lm_pow_structure = aux;
+n_struct = numel(stack_lm_pow_structure);
+
+%%
+for an=2:numel(animal_list)
+
+    current_dir =  [animal_list(an).folder, '\',animal_list(an).name];
+    aux = LFP_SPEED_POW_ANALYSIS(current_dir);
+
+    for j=1:numel(aux)
+        aux(j).animal = animal_list(an).name;
+        stack_lm_pow_structure(n_struct+1) = aux(j);
+        n_struct = n_struct+1;
+    end
+
+end
+
+
+
+%%
+speed_stack             = [];
+acceleration_Stack      = [];
+figure
+subplot(1,3,1)
+hold on
+animal_names = {};
+pctl_ranges = 0:5:100;
+plot([0 100], [0 0], 'k')
+for j= [1 2 3 4 5  7 8]
+    plot(pctl_ranges+2.5,stack_lm_pow_structure(j).speed_play_matrix(:,1)-stack_lm_pow_structure(j).speed_play_matrix(:,2), 'k:')
+    speed_stack = [speed_stack;(stack_lm_pow_structure(j).speed_play_matrix(:,1)-stack_lm_pow_structure(j).speed_play_matrix(:,2))'];
+    animal_names = [animal_names;stack_lm_pow_structure(j).animal];
+
+
+end
+
+
+hold on
+[~, ~, ci] = ttest(speed_stack);
+
+h_stat = nan(1,size(speed_stack,2));
+for j=1:size(speed_stack,2)-1
+[p,h,stats] = signrank(speed_stack(:,j));
+h_stat(j) = p;
+end
+no_nan = ~isnan(sum(ci));
+fill([pctl_ranges(no_nan)+2.5 fliplr(pctl_ranges(no_nan)+2.5)],[ci(1,no_nan) fliplr(ci(2,no_nan))], 'r', 'FaceAlpha',.5, 'EdgeColor','none')
+plot(pctl_ranges+2.5, mean(speed_stack), 'r', 'LineWidth',2)
+
+j = 6
+subplot(2,3,2)
+n_sample = 3000;
+sub_Sample = randsample(size(stack_lm_pow_structure(j).lm_table,1),n_sample);
+x_speed = stack_lm_pow_structure(j).lm_table.Speed(sub_Sample);
+x_accc = stack_lm_pow_structure(j).lm_table.Acceleration(sub_Sample);
+y = stack_lm_pow_structure(j).lm_table.ThetaPow(sub_Sample);
+condition_play = stack_lm_pow_structure(j).lm_table.Play(sub_Sample);
+
+plot(x_speed(condition_play=="0"),y(condition_play=="0"), 'k.')
+hold on
+plot(x_speed(condition_play=="1"),y(condition_play=="1"), 'r.')
+title(j)
+
+subplot(2,3,5)
+
+
+plot(x_accc(condition_play=="0"),y(condition_play=="0"), 'k.')
+hold on
+plot(x_accc(condition_play=="1"),y(condition_play=="1"), 'r.')
+pause(.1)
+end
+subplot(1,3,3)
+regression_model_Stats = [];
+for j= [1 2 3 4 5  7 8]
+    std_pow = std(stack_lm_pow_structure(j).lm_table.ThetaPow);
+    row                     = stack_lm_pow_structure(j).lm_speed_play.Coefficients{'Play_1', {'pValue','tStat', 'Estimate'}};
+    % row(3)                  = row(3)/std_pow;
+    regression_model_Stats = [regression_model_Stats;row];
+
+
+end
+rand_x = (rand(size(regression_model_Stats,1),1)-.5)*.25;
+plot(rand_x(regression_model_Stats(:,1)>=0.01),regression_model_Stats(regression_model_Stats(:,1)>=0.01,3), 'k.', 'MarkerSize',8)
+hold on
+plot(rand_x(regression_model_Stats(:,1)<0.01),regression_model_Stats(regression_model_Stats(:,1)<0.01,3), 'r.', 'MarkerSize',8)
+xlim([-1 1])
