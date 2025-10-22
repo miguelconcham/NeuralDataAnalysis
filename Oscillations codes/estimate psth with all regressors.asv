@@ -654,7 +654,7 @@ mean_delta_per_animal = nan(numel(animal_lst),2);
 
 
 
-all_lengths = diff(stacked_data.play_bouts_table');
+all_lengths = stacked_data.play_bouts_table';
 
 play_bout_lengths = nan(numel(animal_lst),2);
 for j=1:numel(animal_lst)
@@ -663,17 +663,9 @@ mean_delta_per_animal(j,2) = mean(regressor_table.Power(regressor_table.Animal==
 
 
 
-play_bout_lengths(j,1) = sum(all_lengths(categorical(stacked_data.meta(:,1))==animal_lst(j) & cell2mat(stacked_data.meta(:,2))==1));
-play_bout_lengths(j,2) = sum(all_lengths(categorical(stacked_data.meta(:,1))==animal_lst(j) & cell2mat(stacked_data.meta(:,2))==2));
+play_bout_lengthsmean_delta_per_animal(j,1) = mean(all_lengths(categorical(stacked_data.meta(:,1))==animal_lst(j)));
+mean_delta_per_animal(j,2)
 end
 
 figure
-subplot(2,1,1)
 plot(mean_delta_per_animal')
-subplot(2,1,2)
-plot(play_bout_lengths')
-
-%%
-
-figure
-plot(diff(play_bout_lengths'),diff(mean_delta_per_animal'),'.')

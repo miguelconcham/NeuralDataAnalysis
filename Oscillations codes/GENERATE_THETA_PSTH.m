@@ -8,6 +8,7 @@ behavior_data       = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\
 % npx_raw_data = 
 animal_code         = strsplit(current_dir, '\');
 animal_code         = animal_code{end};
+area2analyze        = 'PAG';
 animal_code_params  = strsplit(animal_code, ' ');
 animal_batch        = animal_code_params{1};
 date                = animal_code_params{2};
@@ -77,46 +78,76 @@ end
 
 
 disp('LFP LOADED')
-%% select_mid_pag_channel
+%% -------------------- SELECT PAG CHANNEL(S) --------------------
 disp('Loading Channel Map')
 hard_coded_x_coords = [8 40;258 290; 508 540; 758 790];
 area_limit = readtable(area_limit_table);
+
+load([current_dir,'\chann_map_',area2analyze,'.mat'], 'xcoords', 'ycoords','chanMap')
+% Build animal identifier for area selection
 if strcmp(repeated_animal, 'Single2')
     this_animal = ['Batch', animal_batch(2), repeated_animal];
 else
-this_animal = ['Batch', animal_batch(2), repeated_animal,animal_batch(4)];
+    this_animal = ['Batch', animal_batch(2), repeated_animal,animal_batch(4)];
 end
 area_limit = area_limit(ismember(area_limit.AnimalName,this_animal),:);
+ figure('units','normalized','outerposition',[0 0 .2 1]);
 
 if NPX_Type == 1
 
-    PAG_channels = area_limit{ismember(area_limit.area, {'LPAG'}), {'ch_start', 'ch_end'}};
-    PAG_channels = str2double(PAG_channels);
-    channel_Range = [min(PAG_channels(:)) max(PAG_channels(:))];
-    mid_PAG_channel = round(mean(channel_Range));
-else
-    load([current_dir,'\ChannelMap.mat'], 'xcoords', 'ycoords','chanMap')
-    Y_Range = area_limit{ismember(area_limit.area, {'LPAG'}), {'ProbeNum','depth_start', 'depth_end'}};
-    mid_PAG_channel = nan(size(Y_Range,1),1);
-    figure
-    plot(xcoords,ycoords, 'k.')
-    hold on
+    if ~ismember(192, chanMap)
 
+        pos_191 = find(chanMap==191);
+        pos_193 = find(chanMap==193);
+
+        if pos_193 == pos_191+1
+
+            xcoords = [xcoords;NaN];
+            xcoords(pos_193+1:end) = xcoords(pos_193:end-1);
+            xcoords(pos_193) = 43;
+            ycoords = [ycoords;NaN];
+            ycoords(pos_193+1:end) = ycoords(pos_193:end-1);
+            ycoords(pos_193) = 1900;
+            chanMap = [chanMap;NaN];
+            chanMap(pos_193+1:end) = chanMap(pos_193:end-1);
+            chanMap(pos_193) = 192;
+        else
+            disp('Inconsistent ChannelMap')
+            return
+        end
+    end
+    plot(xcoords,ycoords, 'k.'); hold on
+    % Raw LFP: select channel range for LPAG region
+
+    Y_Range = area_limit{ismember(area_limit.area, {'LPAG'}), {'ProbeNum','depth_start', 'depth_end'}};
+    this_indexes = ycoords>=Y_Range(2) & ycoords<=Y_Range(3);
+    all_locs = [xcoords(this_indexes) ycoords(this_indexes)];
+    plot(all_locs(:,1),all_locs(:,2), 'r.')
+    mean_loc = mean(all_locs);
+    [~, closest_channel]= min(sum(abs([xcoords ycoords]-repmat(mean_loc,numel(ycoords),1)),2));
+    plot(xcoords(closest_channel), ycoords(closest_channel), 'xb')
+    mid_PAG_channel = chanMap(closest_channel);
+    title([this_animal, ' Probe#', num2str(Y_Range(1))])
+else
+    % Preprocessed: use ChannelMap.mat to locate mid-PAG channel
+    plot(xcoords,ycoords, 'k.'); hold on
+    Y_Range = area_limit{ismember(area_limit.area, {'LPAG'}), {'ProbeNum','depth_start', 'depth_end'}};
+
+    mid_PAG_channel = nan(size(Y_Range,1),1);
 
     for j=1:size(Y_Range,1)
         this_indexes = ycoords>=Y_Range(j,2) & ycoords<=Y_Range(j,3) & ismember(xcoords,hard_coded_x_coords(Y_Range(j,1),:));
-
         all_locs = [xcoords(this_indexes) ycoords(this_indexes)];
         plot(all_locs(:,1),all_locs(:,2), 'r.')
-
         mean_loc = mean(all_locs);
         [~, closest_channel]= min(sum(abs([xcoords ycoords]-repmat(mean_loc,numel(ycoords),1)),2));
         plot(xcoords(closest_channel), ycoords(closest_channel), 'xb')
         mid_PAG_channel(j) = chanMap(closest_channel);
-
+        title([this_animal, ' Probe#', num2str(Y_Range(1,:))])
     end
-
 end
+
+pause(.1)
 %% obtain_psth
 hist_range      = [-20 20];
 range_time_wrap = [-5 5];
@@ -231,6 +262,7 @@ for ch_n=1:numel(mid_PAG_channel)
         psth_struct.freq_pow_range          = freq_pow_range;
         psth_struct.min_separation          = min_separation;
         psth_struct.three_point_tw          = three_point_tw;
+        psth_struct.pow_spectrogram         = pow_spectrogram;
 
 
     else
@@ -252,6 +284,7 @@ for ch_n=1:numel(mid_PAG_channel)
         psth_struct(ch_n).freq_pow_range             = freq_pow_range;
         psth_struct(ch_n).min_separation            = min_separation;
         psth_struct(ch_n).three_point_tw            = three_point_tw;
+        psth_struct(ch_n).pow_spectrogram           = pow_spectrogram;
 
 
     end

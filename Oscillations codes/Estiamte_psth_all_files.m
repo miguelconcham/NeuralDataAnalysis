@@ -19,7 +19,7 @@ wind_length     = 1;
 wind_overlap    = .990;
 min_separation = .200;
 f               = .1:.1:6;
-freq_pow_range  = [.5 5];
+freq_pow_range  = [1 5];
 
 %%
 for fn = 1:numel(animal_list)

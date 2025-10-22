@@ -193,30 +193,23 @@ for ns = 1:numel(phase_struct)
     sub_Table =  array2table(squeeze(phase_struct(ns).session_phase_stats(1,:,:)));
     sub_Table.Properties.VariableNames = phase_prop_names;
     this_session_cluster_info.Partner1 =sub_Table;
-
     sub_Table =  array2table(squeeze(phase_struct(ns).session_phase_stats(2,:,:)));
     sub_Table.Properties.VariableNames = phase_prop_names;
+
+    
     this_session_cluster_info.Partner2 =sub_Table;
-
-    sub_Table =  array2table(squeeze(phase_struct(ns).play_phase_stats(1,:,:)));
-    sub_Table.Properties.VariableNames = phase_prop_names;
-    this_session_cluster_info.Play =sub_Table;
-
-    sub_Table =  array2table(squeeze(phase_struct(ns).pre_play_phase_stats(1,:,:)));
-    sub_Table.Properties.VariableNames = phase_prop_names;
-    this_session_cluster_info.PrePlay =sub_Table;
-
-
     sub_Table =  array2table(squeeze(phase_struct(ns).entire_recording_phase_stats(1,:,:)));
     sub_Table.Properties.VariableNames = phase_prop_names;
-    this_session_cluster_info.EntireSession =sub_Table;
 
+
+
+    this_session_cluster_info.EntireSession =sub_Table;
     this_session_cluster_info.session = repmat(animal_names(ns,1),size(this_session_cluster_info,1),1);
 
     all_neurons = [all_neurons; this_session_cluster_info];
 end
 %%
-save([saving_folder,'\tehta_all_neurons_v2.mat'],'all_neurons');
+save([saving_folder,'\delta_all_neurons.mat'],'all_neurons');
 %%
 psth_edges = phase_struct(1).edges_freq;
 psth_centers = .5*(psth_edges(1:end-1) + psth_edges(2:end));

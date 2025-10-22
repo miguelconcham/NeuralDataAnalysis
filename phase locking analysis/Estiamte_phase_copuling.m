@@ -1,8 +1,6 @@
 
 
 
-
-
 npx_Raw_Data = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\NPX data\NPX raw data';
 saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
 animal_list = dir(npx_Raw_Data);
@@ -23,60 +21,67 @@ sr              = 2500;
 filter_order    = 2000;
 
 
-phase_struct = [];
-% Parameters for delta
-% Hd_freq = designfilt('bandpassfir', ...
-% 'FilterOrder', filter_order, ...
-% 'CutoffFrequency1', freq_range_1(1), ...
-% 'CutoffFrequency2', freq_range_1(2), ...
-% 'SampleRate', sr, ...
-% 'DesignMethod', 'window', ...
-% 'Window', 'hamming');
-% bin_size_freq = 0.01;
 
-% Parameters for theta
+% Parameters for delta
 Hd_freq = designfilt('bandpassfir', ...
 'FilterOrder', filter_order, ...
-'CutoffFrequency1', freq_range_2(1), ...
-'CutoffFrequency2', freq_range_2(2), ...
+'CutoffFrequency1', freq_range_1(1), ...
+'CutoffFrequency2', freq_range_1(2), ...
 'SampleRate', sr, ...
 'DesignMethod', 'window', ...
 'Window', 'hamming');
-bin_size_freq = 0.001;
+bin_size_freq = 0.01;
+
+% Parameters for theta
+% Hd_freq = designfilt('bandpassfir', ...
+% 'FilterOrder', filter_order, ...
+% 'CutoffFrequency1', freq_range_2(1), ...
+% 'CutoffFrequency2', freq_range_2(2), ...
+% 'SampleRate', sr, ...
+% 'DesignMethod', 'window', ...
+% 'Window', 'hamming');
+% bin_size_freq = 0.001;
 
 %%
 tic
 for fn = 1:numel(animal_list)
-    
+
     if fn==1
-        phase_struct  = GENERATE_PHASE_COUPLING_STRUCTURE([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq,bin_size_freq );
-         
+        transt_psth  = GENERATE_PHASE_COUPLING_STRUCTURE([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq,bin_size_freq );
+        phase_struct = transt_psth;
+
+        % save([saving_folder,'\',animal_list(fn).name,'_FreqRange_',num2str([Hd_freq.CutoffFrequency1 Hd_freq.CutoffFrequency2])...
+        %     ,'_phase_couplig_structure.mat'],'transt_psth', '-v7.3');
+
+
         n_strctut = n_strctut+numel(phase_struct);
         animal_names = [animal_names;[repmat(animal_list(fn).name,numel(phase_struct),1) num2cell(1:numel(phase_struct))']]
     else
         transt_psth = GENERATE_PHASE_COUPLING_STRUCTURE([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq,bin_size_freq );
-      
+        % save([saving_folder,'\',animal_list(fn).name,'_FreqRange_',num2str([Hd_freq.CutoffFrequency1 Hd_freq.CutoffFrequency2])...
+        %     ,'_phase_couplig_structure.mat'],'transt_psth', '-v7.3');
+
         for sub_j=1:numel(transt_psth)
-    
+
             phase_struct(n_strctut) = transt_psth(sub_j);
             n_strctut = n_strctut+1;
         end
         animal_names = [animal_names;[repmat({animal_list(fn).name},numel(transt_psth),1) num2cell(1:numel(transt_psth))' ]]
 
     end
-toc
+    toc
 
 end
 
 
 %% save if needed
-disp('saving')
-save([saving_folder,'\theta_phase_couplig_structure_updated.mat'],'phase_struct', '-v7.3');
-save([saving_folder,'\theta_phase_couplig_animal_names_updated.mat'],'animal_names');
+% disp('saving')
+% save([saving_folder,'\delta_phase_couplig_structure_updated.mat'],'phase_struct', '-v7.3');
+% save([saving_folder,'\delta_phase_couplig_animal_names_updated.mat'],'animal_names');
 
 %% load
-load([saving_folder,'\delta_phase_couplig_structure.mat'],'phase_struct');
-load([saving_folder,'\delta_phase_couplig_animal_names.mat'],'animal_names');
+load([saving_folder,'\delta_phase_couplig_structure_updated.mat'],'phase_struct');
+load([saving_folder,'\delta_phase_couplig_animal_names_updated.mat'],'animal_names');
 % phase_struct(6 )=[];
 % animal_names(6,:)=[];
 %%
@@ -85,50 +90,74 @@ load([saving_folder,'\delta_phase_couplig_animal_names.mat'],'animal_names');
 
 all_session_phase_stats = [];
 all_session_psth        = [];
-
+condition_1 = 'Partner1';
+condition_2 = 'Partner2';
 all_neurons = [];
 for ns = 1:numel(phase_struct)
 
-    all_session_phase_stats = cat(2,all_session_phase_stats, phase_struct(ns).session_phase_stats(1:2,:,:));
+     all_session_phase_stats = cat(2,all_session_phase_stats, phase_struct(ns).session_phase_stats(1:2,:,:));
      all_session_psth = cat(2,all_session_psth, phase_struct(ns).session_psth(1:2,:,:));
      this_session_cluster_info = phase_struct(ns).cluster_info;
+
      sub_Table =  array2table(squeeze(phase_struct(ns).session_phase_stats(1,:,:)));
      sub_Table.Properties.VariableNames =phase_prop_names;
      this_session_cluster_info.Partner1 =sub_Table;
+
      sub_Table =  array2table(squeeze(phase_struct(ns).session_phase_stats(2,:,:)));
      sub_Table.Properties.VariableNames = phase_prop_names;
      this_session_cluster_info.Partner2 =sub_Table;
+
+
+     sub_Table =  array2table(squeeze(phase_struct(ns).play_phase_stats(1,:,:)));
+     sub_Table.Properties.VariableNames =phase_prop_names;
+     this_session_cluster_info.Play =sub_Table;
+
+     sub_Table =  array2table(squeeze(phase_struct(ns).pre_play_phase_stats(1,:,:)));
+     sub_Table.Properties.VariableNames = phase_prop_names;
+     this_session_cluster_info.PrePlay =sub_Table;
+
+
      this_session_cluster_info.session = repmat(animal_names(ns,1),size(this_session_cluster_info,1),1);
+
 
      sub_Table =  array2table(squeeze(phase_struct(ns).entire_recording_phase_stats(1,:,:)));
      sub_Table.Properties.VariableNames = phase_prop_names;
      this_session_cluster_info.EntireSession =sub_Table;
+
      this_session_cluster_info.session = repmat(animal_names(ns,1),size(this_session_cluster_info,1),1);
      all_neurons = [all_neurons; this_session_cluster_info];
 end
 
 %%
 
-save([saving_folder,'\delta_all_neurons.mat'],'all_neurons', '-v7.3');
+load([saving_folder,'\delta_all_neurons_v2.mat'],'all_neurons');
 %% ploting rate change
 all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
 % area_list = unique(all_neurons.area)';
-
+condition_1 = 'Partner2';
+condition_2 = 'Partner1';
 % area_list =  {'4N'	'DLPAG'	'DMPAG'	'DR'	'InfCol'	'LPAG'	'LSD'	'LSI'	'SupCol'	'VLPAG'	'isRt'	'mlf'};
-
+alpha = 0.05;
 area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' 'isRt'	};
 col = strcmp(phase_prop_names, 'MeanRate');
 figure
 concatenated_rate_differences = [];
 mean_rate_differences = [];
 d_prime = [];
+
 for an=1:numel(area_list)
     subplot(1,numel(area_list),an)
-    index = strcmp(all_neurons.area, area_list{an}) & all_neurons.Partner1.PPCPval<alpha  & all_neurons.Partner2.PPCPval<alpha & ~isnan(all_neurons.Partner1.PPC + all_neurons.Partner2.PPC);
+    % index = strcmp(all_neurons.area, area_list{an}) & all_neurons.(condition_1).PPCPval<alpha  & all_neurons.(condition_2).PPCPval<alpha & ~isnan(all_neurons.(condition_1).PPC + all_neurons.(condition_2).PPC);
+     index = strcmp(all_neurons.area, area_list{an}) & all_neurons.EntireSession.PPCPval<alpha &  ~isnan(all_neurons.(condition_1).PPC + all_neurons.(condition_2).PPC);
     x_jit = (rand(sum(index),2) -.5)*.25;
     matrix2plot = 100*(squeeze(all_session_phase_stats(:,index,col))-repmat(all_neurons.fr(index)',2,1))./repmat(all_neurons.fr(index)',2,1);
     plot((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,':k')
-    mean_rate_differences = [mean_rate_differences;mean([diff(matrix2plot)' ones(size(matrix2plot,2),1)*an], 'omitmissing')];    
+    data = [diff(matrix2plot)' ones(size(matrix2plot,2),1)*an];
+    if size(data,1)>1
+    mean_rate_differences = [mean_rate_differences;mean(data, 'omitmissing')];    
+    else
+          mean_rate_differences = [mean_rate_differences;data];
+    end
 
 
      d_prime = [d_prime;[2*mean(diff(matrix2plot))/sqrt(sum(std(matrix2plot,[],2))) an]];    
@@ -149,7 +178,7 @@ for an=1:numel(area_list)
 end
 %%
 
-figure(area_figure )
+figure
 
 subplot(3,1,2)
 subplot(1,2,1)
@@ -182,8 +211,8 @@ for an=1:numel(area_list)
     index = strcmp(all_neurons.area, area_list{an});
     x_jit = (rand(sum(index),2) -.5)*.25;
     semilogy((repmat([1 2],sum(index),1)+x_jit)',squeeze(all_session_phase_stats(:,index,col)),':k')
-    p1_bool     = all_neurons.Partner1.PPCPval(index)<alpha;
-    p2_bool     = all_neurons.Partner2.PPCPval(index)<alpha;
+    p1_bool     = all_neurons.(condition_1).PPCPval(index)<alpha;
+    p2_bool     = all_neurons.(condition_2).PPCPval(index)<alpha;
     all_bool    = all_neurons.EntireSession.PPCPval(index)<alpha;
     entreinment_per_partner(an,:) = [sum(p1_bool & p2_bool) sum(p1_bool & ~p2_bool) sum(~p1_bool & p2_bool) sum(~p1_bool & ~p2_bool & all_bool) sum(~p1_bool & ~p2_bool & ~all_bool) sum(index)*sum(index)]/sum(index);
     hold on
@@ -204,13 +233,24 @@ col = strcmp(phase_prop_names, 'PPC');
 figure
 concatenated_phase_differences = [];
 mean_phase_differences = [];
+
 for an=1:numel(area_list)
     subplot(1,numel(area_list),an)
-    index = strcmp(all_neurons.area, area_list{an}) & all_neurons.Partner1.PPCPval<alpha  & all_neurons.Partner2.PPCPval<alpha & ~isnan(all_neurons.Partner1.PPC + all_neurons.Partner2.PPC);
+    index = strcmp(all_neurons.area, area_list{an}) & all_neurons.EntireSession.PPCPval<alpha &  ~isnan(all_neurons.(condition_1).PPC + all_neurons.(condition_2).PPC);
     x_jit = (rand(sum(index),2) -.5)*.25;
-        matrix2plot = squeeze(all_session_phase_stats(:,index,col));
-        mean_phase_differences = [mean_phase_differences;mean([diff(matrix2plot)' ones(size(matrix2plot,2),1)*an], 'omitmissing')];
-        concatenated_phase_differences = [concatenated_phase_differences;[diff(matrix2plot)' ones(size(matrix2plot,2),1)*an]];
+    matrix2plot = squeeze(all_session_phase_stats(:,index,col));
+
+     data = [diff(matrix2plot)' ones(size(matrix2plot,2),1)*an ] ;
+    if size(data,1)>1
+    mean_phase_differences = [mean_phase_differences;mean(data, 'omitmissing')];    
+    else
+          mean_phase_differences = [mean_phase_differences;data];
+    end
+   
+
+
+
+    concatenated_phase_differences = [concatenated_phase_differences;[diff(matrix2plot)' ones(size(matrix2plot,2),1)*an all_neurons.EntireSession.PreferedAngle(index)]];
 
 
     semilogy((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,':k')
@@ -270,6 +310,33 @@ xlim tight
 ylim([-100 100])
 
 %%
+area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' 'isRt'	};
+alpha=0.05;
+figure
+names = categorical({'Trough','Peak'});
+for an=1:numel(area_list)
+    subplot(1,numel(area_list),an)
+    index           = concatenated_phase_differences(:,2)==an;
+    angle_index     = concatenated_phase_differences(:,3)<-p/2 | concatenated_phase_differences(:,3)>pi/2;
+
+
+    p =ranksum(concatenated_phase_differences(angle_index & index,1),concatenated_phase_differences(~angle_index & index,1));
+    p1 = signrank(concatenated_phase_differences(angle_index & index,1));
+
+    swarmchart(names(angle_index(index)+1) , concatenated_phase_differences(index,1),'.')
+    hold on
+    if p1<alpha
+        text(1,.19, num2str(round(p1,4)))
+    end
+
+    p2 = signrank(concatenated_phase_differences(~angle_index & index,1));
+    if p2<alpha
+        text(2,.19, num2str(round(p2,4)))
+    end
+    title([area_list{an}, '  pVal ', num2str(p)])
+    ylim([-.2 .2])
+
+end
 
 %%
 
@@ -277,7 +344,7 @@ area_list = {'SupCol'};
 
 figure
 col = 4;
-    subplot(1,2,1)
+    subplot(1,3,1)
     index = strcmp(all_neurons.area, area_list{1});
     x_jit = (rand(sum(index),2) -.5)*.25;
 
@@ -298,7 +365,7 @@ col = 4;
     title([area_list{1},  ' ', num2str(p)])
 
     col = 6;
-    subplot(1,2,2)
+    subplot(1,3,2)
     matrix2plot = squeeze(all_session_phase_stats(:,index,col))-repmat(all_neurons.fr(index)',2,1);
     plot((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,':k')
     hold on
@@ -341,7 +408,7 @@ all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
 all_neurons_delta = all_neurons;
 
 
-theta_partner_1 = all_neurons_theta.Partner1.Pval;
+theta_partner_1 = all_neurons_theta.(condition_1).Pval;
 
 
 
@@ -361,13 +428,13 @@ percentages_partner_2 = zeros(numel(area_list),4);
 
 for an=1:numel(area_list) 
     index = strcmp(all_neurons.area, area_list{an});
-    percentages_partner_1(an,1) = sum(all_neurons_theta.Partner1.Pval(index)<alpha & all_neurons_delta.Partner1.Pval(index)>alpha)/sum(~isnan(all_neurons_theta.Partner1.Pval(index)));
-    percentages_partner_1(an,2) = sum(all_neurons_delta.Partner1.Pval(index)<alpha & all_neurons_theta.Partner1.Pval(index)>alpha)/sum(~isnan(all_neurons_delta.Partner1.Pval(index)));
-    percentages_partner_1(an,3) =  sum(all_neurons_delta.Partner1.Pval(index)<alpha & all_neurons_theta.Partner1.Pval(index)<alpha)/sum(~isnan(all_neurons_delta.Partner1.Pval(index)));
+    percentages_partner_1(an,1) = sum(all_neurons_theta.(condition_1).Pval(index)<alpha & all_neurons_delta.(condition_1).Pval(index)>alpha)/sum(~isnan(all_neurons_theta.(condition_1).Pval(index)));
+    percentages_partner_1(an,2) = sum(all_neurons_delta.(condition_1).Pval(index)<alpha & all_neurons_theta.(condition_1).Pval(index)>alpha)/sum(~isnan(all_neurons_delta.(condition_1).Pval(index)));
+    percentages_partner_1(an,3) =  sum(all_neurons_delta.(condition_1).Pval(index)<alpha & all_neurons_theta.(condition_1).Pval(index)<alpha)/sum(~isnan(all_neurons_delta.(condition_1).Pval(index)));
 
-    percentages_partner_2(an,1) = sum(all_neurons_theta.Partner2.Pval(index)<alpha & all_neurons_delta.Partner2.Pval(index)>alpha)/sum(~isnan(all_neurons_theta.Partner2.Pval(index)));
-    percentages_partner_2(an,2) = sum(all_neurons_delta.Partner2.Pval(index)<alpha & all_neurons_theta.Partner2.Pval(index)>alpha)/sum(~isnan(all_neurons_delta.Partner2.Pval(index)));
-    percentages_partner_2(an,3) =  sum(all_neurons_delta.Partner2.Pval(index)<alpha & all_neurons_theta.Partner2.Pval(index)<alpha)/sum(~isnan(all_neurons_delta.Partner2.Pval(index)));
+    percentages_partner_2(an,1) = sum(all_neurons_theta.(condition_2).Pval(index)<alpha & all_neurons_delta.(condition_2).Pval(index)>alpha)/sum(~isnan(all_neurons_theta.(condition_2).Pval(index)));
+    percentages_partner_2(an,2) = sum(all_neurons_delta.(condition_2).Pval(index)<alpha & all_neurons_theta.(condition_2).Pval(index)>alpha)/sum(~isnan(all_neurons_delta.(condition_2).Pval(index)));
+    percentages_partner_2(an,3) =  sum(all_neurons_delta.(condition_2).Pval(index)<alpha & all_neurons_theta.(condition_2).Pval(index)<alpha)/sum(~isnan(all_neurons_delta.(condition_2).Pval(index)));
 end
 
 
