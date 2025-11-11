@@ -7,6 +7,7 @@ area2analyse        = 'PAG';
 area_limit_table    = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\Area_limits_GoodLooking.xlsx';
 behavior_data       = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Behavior backups';
 play_behaviors      = {'Pounce', 'CC','Boxing', 'Evasion','Pin', 'Escape', 'CB', 'CD'};
+non_play_behaviors  = {'Grooming', 'PounceI','Rearing', 'Sniffing','Scratching', 'Bite'};
 
 % npx_raw_data = 
 animal_code         = strsplit(npx_data_dir, '\');
@@ -76,6 +77,20 @@ config.behavior_window  = 0;
 [play_bouts_table]      = play_bout(config);
 
 pre_play_bouts = build_balanced_periods(play_bouts_table);
+
+
+config.Behavior         = Behavior;
+config.repeated_animal  = repeated_animal;
+config.animal_types     = animal_types        ;
+config.play_behaviors   = non_play_behaviors      ;
+config.beh_bin          = bin_size             ;
+config.conv_length      = conv_length;
+config.behavior_window  = 0;
+
+[non_play_bouts_table]      = play_bout(config);
+pre_non_play_bouts          = build_balanced_periods(non_play_bouts_table);
+
+
 %% determining NPX type
 hard_coded_x_coords_NPX2 = [8 40;258 290; 508 540; 758 790];
 load([npx_data_dir,'\','chann_map_', area2analyse, '.mat'], 'chanMap', 'xcoords', 'ycoords')
@@ -104,11 +119,7 @@ else
              return
          end
      end
-
-
 end
-
-
 
 %% Create (load) channel map
 disp('Loading Channel Map')
@@ -187,11 +198,15 @@ session_phase_stats             = nan(size(partner_sessions,1), size(cluster_inf
 entire_recording_phase_stats    = nan(1, size(cluster_info,1),7);
 play_phase_stats                = nan(1, size(cluster_info,1),7);
 pre_play_phase_stats            = nan(1, size(cluster_info,1),7);
+non_play_phase_stats            = nan(1, size(cluster_info,1),7);
+pre_non_play_phase_stats        = nan(1, size(cluster_info,1),7);
 
 session_psth                    = nan(size(partner_sessions,1), size(cluster_info,1),numel(edges_freq)-1);
 entire_recording_psth           = nan(1, size(cluster_info,1),numel(edges_freq)-1);
 play_psth                       = nan(size(partner_sessions,1), size(cluster_info,1),numel(edges_freq)-1);
 pre_play_psth                   = nan(1, size(cluster_info,1),numel(edges_freq)-1);
+non_play_psth                    = nan(size(partner_sessions,1), size(cluster_info,1),numel(edges_freq)-1);
+pre_non_play_psth               = nan(1, size(cluster_info,1),numel(edges_freq)-1);
 assigned                        = false( size(cluster_info,1),1);
 for ch_n=channels_with_spikes
     
@@ -330,9 +345,9 @@ for ch_n=channels_with_spikes
             session_phase_stats(sn,nn,:) = [this_neuron_prefered_angle this_neuron_mvl this_neuron_mvl_p this_neuron_ppc this_neuron_ppc_p mean_rate this_id];
         end
         
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        %%%%%% NOW ESTIAMTE EACH PLAY PHASE LOCKING %%%%%%%%%%
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %%%%%% NOW ESTIAMTE EACH PLAYBOUT PHASE LOCKING %%%%%%%%%%
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         
         mask = false(size(this_spikes));
         for b = 1:size(play_bouts_table,1)
@@ -442,6 +457,121 @@ for ch_n=channels_with_spikes
         end
         pre_play_psth (sn,nn,:) =  mean(psth_this_session_freq);
 
+
+
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %%%%%% NOW ESTIAMTE EACH NON-PLAYBOUT PHASE LOCKING %%%%%%%%%%
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        
+
+        mask = false(size(this_spikes));
+        for b = 1:size(non_play_bouts_table,1)
+            mask = mask | (this_spikes > non_play_bouts_table(b,1) & this_spikes < non_play_bouts_table(b,2));
+        end
+        non_play_spikes     = this_spikes(mask);
+
+         mask = false(size(this_spikes));
+        for b = 1:size(pre_non_play_bouts,1)
+            mask = mask | (this_spikes > pre_non_play_bouts(b,1) & this_spikes < pre_non_play_bouts(b,2));
+        end
+        pre_paly_spikes = this_spikes(mask);
+
+        non_play_phases     = interp1(lfp_time, phase_data,non_play_spikes);
+        pre_paly_phases = interp1(lfp_time, phase_data,pre_paly_spikes);
+
+        %estimating entire recording  MVL, p_val, prefered angle, mean rate
+        %and the corresdponign psth
+        non_play_mvl                 = circ_r(non_play_phases);
+        non_play_prefered_angle      = circ_mean(non_play_phases);
+        non_play_ppc                 = compute_ppc_fast(non_play_phases);
+        tic
+        rand_r            = nan(n_rand,1);
+        rand_ppc          = nan(n_rand,1);
+        for nr=1:n_rand
+            rand_r(nr) =circ_r((randsample(phase_data,numel(non_play_phases), false))');
+            rand_ppc(nr) = compute_ppc_fast((randsample(phase_data,numel(non_play_phases), false))');
+        end
+        toc
+
+        non_play_mvl_p       = sum(rand_r>non_play_mvl)/n_rand;
+        non_play_ppc_p       = sum(rand_ppc>non_play_ppc)/n_rand;
+        mask = false(size(dt));
+        for b = 1:size(non_play_bouts_table,1)
+            mask = mask | (dt > non_play_bouts_table(b,1) & dt < non_play_bouts_table(b,2));
+        end
+        non_play_rate = mean(lambda( mask));
+
+
+        pre_non_play_mvl                 = circ_r(pre_paly_phases);
+        pre_non_play_prefered_angle      = circ_mean(pre_paly_phases);
+        pre_non_play_ppc                 = compute_ppc_fast(pre_paly_phases);
+        tic
+        rand_r            = nan(n_rand,1);
+        rand_ppc          = nan(n_rand,1);
+        for nr=1:n_rand
+            rand_r(nr) =circ_r((randsample(phase_data,numel(pre_paly_phases), false))');
+            rand_ppc(nr) = compute_ppc_fast((randsample(phase_data,numel(pre_paly_phases), false))');
+        end
+        toc
+        pre_non_play_mvl_p       = sum(rand_r>pre_non_play_mvl)/n_rand;
+        pre_non_play_ppc_p       = sum(rand_ppc>pre_non_play_ppc)/n_rand;
+         
+        mask = false(size(dt));
+        for b = 1:size(pre_non_play_bouts,1)
+            mask = mask | (dt > pre_non_play_bouts(b,1) & dt < pre_non_play_bouts(b,2));
+        end
+        pre_non_play_rate        = mean(lambda(mask));
+
+
+
+        if isempty(pre_non_play_prefered_angle), pre_non_play_prefered_angle = NaN; end
+        if isempty(pre_non_play_ppc),pre_non_play_ppc = NaN; end
+        if isempty(pre_non_play_ppc_p),pre_non_play_ppc_p = NaN; end
+        if isempty(pre_non_play_mvl_p), pre_non_play_mvl_p = NaN; end
+        if isempty(pre_non_play_mvl), pre_non_play_mvl = NaN; end
+        if isempty(pre_non_play_rate), pre_non_play_rate = NaN; end
+
+        if isempty(non_play_prefered_angle), non_play_prefered_angle = NaN; end
+        if isempty(non_play_ppc),non_play_ppc = NaN; end
+        if isempty(non_play_ppc_p),non_play_ppc_p = NaN; end
+        if isempty(non_play_mvl_p), non_play_mvl_p = NaN; end
+        if isempty(non_play_mvl), non_play_mvl = NaN; end
+        if isempty(non_play_rate), non_play_rate = NaN; end
+
+
+        non_play_phase_stats(1,nn,:)        = [    non_play_prefered_angle     non_play_mvl     non_play_mvl_p     non_play_ppc     non_play_ppc_p     non_play_rate this_id];
+        pre_non_play_phase_stats(1,nn,:)    = [pre_non_play_prefered_angle pre_non_play_mvl pre_non_play_mvl_p pre_non_play_ppc pre_non_play_ppc_p pre_non_play_rate this_id];
+        
+        mask = false(size(lfp_time));
+        for b = 1:size(non_play_bouts_table,1)
+            mask = mask | (lfp_time > non_play_bouts_table(b,1) & lfp_time < non_play_bouts_table(b,2));
+        end
+        non_play_time                       = find(mask);
+        non_play_peaks                      = max_locs_freq(ismember(max_locs_freq,non_play_time));
+
+        psth_this_session_freq  = nan(numel(non_play_peaks),numel(edges_freq)-1);
+        for j=1:numel(non_play_peaks)
+            this_peak_time                  = lfp_time(non_play_peaks(j));
+            spikes_this_peak                = this_spikes(this_spikes>=this_peak_time+psth_range_freq(1) & this_spikes<=this_peak_time+psth_range_freq(2))-this_peak_time;
+            psth_this_session_freq(j,:)    = histcounts(spikes_this_peak,edges_freq);
+        end
+        non_play_psth (sn,nn,:) =  mean(psth_this_session_freq);
+
+    
+        mask = false(size(lfp_time));
+        for b = 1:size(pre_non_play_bouts,1)
+            mask = mask | (lfp_time > pre_non_play_bouts(b,1) & lfp_time < pre_non_play_bouts(b,2));
+        end
+        pre_non_play_time       = find(mask);
+        pre_non_play_peaks      = max_locs_freq(ismember(max_locs_freq,pre_non_play_time));
+        psth_this_session_freq  = nan(numel(pre_non_play_peaks),numel(edges_freq)-1);
+        for j=1:numel(pre_non_play_peaks)
+            this_peak_time                  = lfp_time(pre_non_play_peaks(j));
+            spikes_this_peak                = this_spikes(this_spikes>=this_peak_time+psth_range_freq(1) & this_spikes<=this_peak_time+psth_range_freq(2))-this_peak_time;
+            psth_this_session_freq(j,:)    = histcounts(spikes_this_peak,edges_freq);
+        end
+        pre_non_play_psth (sn,nn,:) =  mean(psth_this_session_freq);
+
     end
 
 
@@ -469,6 +599,15 @@ phase_struct.play_psth                          = play_psth;
 %store pre-play data
 phase_struct.pre_play_phase_stats               = pre_play_phase_stats;
 phase_struct.pre_play_psth                      = pre_play_psth;
+
+
+%store  non-play data
+phase_struct.non_play_phase_stats                   = non_play_phase_stats;
+phase_struct.non_play_psth                          = non_play_psth;
+
+%store pre-non-play data
+phase_struct.pre_non_play_phase_stats               = pre_non_play_phase_stats;
+phase_struct.pre_non_play_psth                      = pre_non_play_psth;
 
 
 

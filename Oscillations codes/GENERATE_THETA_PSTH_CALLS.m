@@ -1,4 +1,4 @@
-function psth_struct = GENERATE_THETA_PSTH_CALLS(animal_code,f,freq_range)
+function psth_struct = GENERATE_THETA_PSTH_CALLS(animal_code,f,freq_range, wind_params)
 % GENERATE_THETA_PSTH
 % Computes freq-band (6–12 Hz) LFP power peri-event time histograms (PSTHs)
 % around social play bouts and key behaviors. Outputs a struct with aligned data.
@@ -8,8 +8,8 @@ function psth_struct = GENERATE_THETA_PSTH_CALLS(animal_code,f,freq_range)
 hist_range      = [-2 2];       % peri-event window for onset/offset (s)
 
 % Spectrogram parameters
-wind_length     = .250;    % 250 ms
-wind_overlap    = 0.248;   % 249 ms overlap
+wind_length     = wind_params(1);    % 250 ms
+wind_overlap    = wind_params(2);   % 249 ms overlap
 spect_bin_size  = wind_length-wind_overlap;
 
 % f          = 4:.1:15;      % frequency range for spectrogram
@@ -20,7 +20,7 @@ spect_bin_size  = wind_length-wind_overlap;
 %% -------------------- SETUP AND PATHS --------------------
 % Define behavior types of interest
 play_behaviors = {'Pounce', 'CC','Boxing', 'Evasion','Pin', 'Escape', 'CB', 'CD'};
-
+area2analyze = 'PAG';
 % Define data directories for synchronization, anatomical limits, and behavior
 call_folder         =  '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\CallDetectionBackup';
 synch_directory     = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Synch data';
@@ -63,10 +63,12 @@ disp('LFP LOADED')
 
 
 %% -------------------- SELECT PAG CHANNEL(S) --------------------
+%% -------------------- SELECT PAG CHANNEL(S) --------------------
 disp('Loading Channel Map')
 hard_coded_x_coords = [8 40;258 290; 508 540; 758 790];
 area_limit = readtable(area_limit_table);
 
+load([npx_folder,'\',animal_code,'\chann_map_',area2analyze,'.mat'], 'xcoords', 'ycoords','chanMap')
 % Build animal identifier for area selection
 if strcmp(repeated_animal, 'Single2')
     this_animal = ['Batch', animal_batch(2), repeated_animal];
@@ -74,20 +76,50 @@ else
     this_animal = ['Batch', animal_batch(2), repeated_animal,animal_batch(4)];
 end
 area_limit = area_limit(ismember(area_limit.AnimalName,this_animal),:);
+ figure('units','normalized','outerposition',[0 0 .2 1]);
 
 if NPX_Type == 1
+
+    if ~ismember(192, chanMap)
+
+        pos_191 = find(chanMap==191);
+        pos_193 = find(chanMap==193);
+
+        if pos_193 == pos_191+1
+
+            xcoords = [xcoords;NaN];
+            xcoords(pos_193+1:end) = xcoords(pos_193:end-1);
+            xcoords(pos_193) = 43;
+            ycoords = [ycoords;NaN];
+            ycoords(pos_193+1:end) = ycoords(pos_193:end-1);
+            ycoords(pos_193) = 1900;
+            chanMap = [chanMap;NaN];
+            chanMap(pos_193+1:end) = chanMap(pos_193:end-1);
+            chanMap(pos_193) = 192;
+        else
+            disp('Inconsistent ChannelMap')
+            return
+        end
+    end
+    plot(xcoords,ycoords, 'k.'); hold on
     % Raw LFP: select channel range for LPAG region
-    PAG_channels = area_limit{ismember(area_limit.area, {'LPAG'}), {'ch_start', 'ch_end'}};
-    PAG_channels = str2double(PAG_channels);
-    channel_Range = [min(PAG_channels(:)) max(PAG_channels(:))];
-    mid_PAG_channel = round(mean(channel_Range));
+
+    Y_Range = area_limit{ismember(area_limit.area, {'LPAG'}), {'ProbeNum','depth_start', 'depth_end'}};
+    this_indexes = ycoords>=Y_Range(2) & ycoords<=Y_Range(3);
+    all_locs = [xcoords(this_indexes) ycoords(this_indexes)];
+    plot(all_locs(:,1),all_locs(:,2), 'r.')
+    mean_loc = mean(all_locs);
+    [~, closest_channel]= min(sum(abs([xcoords ycoords]-repmat(mean_loc,numel(ycoords),1)),2));
+    plot(xcoords(closest_channel), ycoords(closest_channel), 'xb')
+    mid_PAG_channel = chanMap(closest_channel);
+    title([this_animal, ' Probe#', num2str(Y_Range(1))])
 else
     % Preprocessed: use ChannelMap.mat to locate mid-PAG channel
-    load([npx_folder,'\',animal_code,'\ChannelMap.mat'], 'xcoords', 'ycoords','chanMap')
-    Y_Range = area_limit{ismember(area_limit.area, {'LPAG'}), {'ProbeNum','depth_start', 'depth_end'}};
-    mid_PAG_channel = nan(size(Y_Range,1),1);
-    figure
     plot(xcoords,ycoords, 'k.'); hold on
+    Y_Range = area_limit{ismember(area_limit.area, {'LPAG'}), {'ProbeNum','depth_start', 'depth_end'}};
+
+    mid_PAG_channel = nan(size(Y_Range,1),1);
+
     for j=1:size(Y_Range,1)
         this_indexes = ycoords>=Y_Range(j,2) & ycoords<=Y_Range(j,3) & ismember(xcoords,hard_coded_x_coords(Y_Range(j,1),:));
         all_locs = [xcoords(this_indexes) ycoords(this_indexes)];
@@ -96,9 +128,11 @@ else
         [~, closest_channel]= min(sum(abs([xcoords ycoords]-repmat(mean_loc,numel(ycoords),1)),2));
         plot(xcoords(closest_channel), ycoords(closest_channel), 'xb')
         mid_PAG_channel(j) = chanMap(closest_channel);
+        title([this_animal, ' Probe#', num2str(Y_Range(1,:))])
     end
 end
 
+pause(.1)
 %% -------------------- COMPUTE SPECTROGRAM & THETA POWER --------------------
 
 

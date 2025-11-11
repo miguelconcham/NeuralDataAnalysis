@@ -1,0 +1,840 @@
+%%figure folder
+n_wapred_bins = 60;
+warped_time     = (((1:n_wapred_bins)/20)*5) - 5 ;
+baseline = [-5 0];
+baseline_index      = warped_time>=baseline(1) & warped_time<=baseline(2);
+
+response_time = [0 5];
+time_indxs      = warped_time>=response_time(1) & warped_time<=response_time(2);
+all_matched_tables = [];
+
+cd('\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis')
+figure_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Codes\Figure codes\Figure 7 Inputs';
+%% load delta and theta phase data
+saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
+
+load([saving_folder,'\theta_all_neurons_v2.mat'],'all_neurons');
+all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
+all_neurons_TD = all_neurons;
+all_neurons_TD.Properties.VariableNames(ismember(all_neurons_TD.Properties.VariableNames,{'Partner1'}))         = {'ThetaPartner1'};
+all_neurons_TD.Properties.VariableNames(ismember(all_neurons_TD.Properties.VariableNames,{'Partner2'}))         = {'ThetaPartner2'};
+all_neurons_TD.Properties.VariableNames(ismember(all_neurons_TD.Properties.VariableNames,{'Play'}))             = {'ThetaPlay'};
+all_neurons_TD.Properties.VariableNames(ismember(all_neurons_TD.Properties.VariableNames,{'PrePlay'}))          = {'ThetaPrePlay'};
+all_neurons_TD.Properties.VariableNames(ismember(all_neurons_TD.Properties.VariableNames,{'EntireSession'}))    = {'ThetaEntireSession'};
+
+load([saving_folder,'\delta_all_neurons_v2.mat'],'all_neurons');
+all_neurons.area(ismember(all_neurons.area, {'isRT'}))  =     {'isRt'  };
+all_neurons_TD.DeltaPartner1                            = all_neurons.Partner1;
+all_neurons_TD.DeltaPartner2                            = all_neurons.Partner2;
+all_neurons_TD.DeltaEntireSession                       = all_neurons.EntireSession;
+all_neurons_TD.DeltaPlay                                = all_neurons.Play;
+all_neurons_TD.DeltaPrePlay                             = all_neurons.PrePlay;
+all_neurons_TD.Exited                                   = nan(size(all_neurons_TD,1),1);
+all_neurons_TD.Inhibited                                = nan(size(all_neurons_TD,1),1);
+
+
+
+
+
+    behavior_labels = {'play', 'CH', 'POA','POB', 'PWIA','PWIB', 'EV', ...
+        'RE',  'ES', 'CD', 'SN', 'CB', 'GR','PI', 'BI', 'SC'};
+ 
+base_conditions = {'','play', 'CH', 'POA','POB', 'PWIA','PWIB', 'EV', ...
+        'RE',  'ES', 'CD', 'SN', 'CB', 'GR','PI', 'BI', 'SC'};
+roles = {'Self', 'Other'};
+pval_fields = {numel(base_conditions),numel(roles)};
+for b = 1:numel(base_conditions)
+    for r = 1:numel(roles)
+        if isempty(base_conditions{b})
+            field_name = sprintf('PsthWarped%s', roles{r});
+            field_name_sign = sprintf('PsthWarpedPval_%s', roles{r});
+        else
+            field_name = sprintf('PsthWarped%s%s', base_conditions{b}, roles{r});
+            field_name_sign = sprintf('PsthWarpedPval%s%s', base_conditions{b}, roles{r});
+        end
+        pval_fields {b,r}=field_name_sign;
+        all_neurons_TD.(field_name)         = nan(size(all_neurons_TD,1), n_wapred_bins);
+        all_neurons_TD.(field_name_sign) = nan(size(all_neurons_TD,1), n_wapred_bins);
+    end
+end
+
+animal_labels  = {'self','other'};
+shuffle_label  = 'shuffled_'; 
+for a = 1:numel(animal_labels)
+    animal = animal_labels{a};
+
+    for b = 1:numel(behavior_labels)
+        behavior = behavior_labels{b};
+
+        % Build field name Exited
+        field_name = sprintf('Exited_%s_%s', animal, behavior);
+
+        % Initialize the field with NaN
+        all_neurons_TD.(field_name) = nan(height(all_neurons_TD), 1);
+
+        % Build field name Inhibited
+        field_name = sprintf('Inhibited_%s_%s', animal, behavior);
+
+        % Initialize the field with NaN
+        all_neurons_TD.(field_name) = nan(height(all_neurons_TD), 1);
+
+
+    end
+end
+
+
+all_neurons_TD.PsthOnset  = nan(size(all_neurons_TD,1),400);
+all_neurons_TD.PsthOffset  = nan(size(all_neurons_TD,1),400);
+all_neurons_TD.PsthOnlyPB  = nan(size(all_neurons_TD,1),400);
+
+psth_map = {};
+
+% Combine your behavior and partner lists
+n_partners = 2;
+all_labels = [base_conditions, arrayfun(@(pn) sprintf('Partner%d', pn), 1:n_partners, 'UniformOutput', false)];
+
+for b = 1:numel(all_labels)
+    base = all_labels{b};
+
+    % --- Handle the 'play' (empty) condition ---
+    if isempty(base) || strcmp(base, 'play')
+        var_self   = 'all_psth_self_warped';
+        var_other  = 'all_psth_other_warped';
+        field_self  = 'PsthWarpedSelf';
+        field_other = 'PsthWarpedOther';
+    else
+        % --- Handle behavior or partner-specific cases ---
+        var_self   = sprintf('all_psth_self_warped_%s', base);
+        var_other  = sprintf('all_psth_other_warped_%s', base);
+        field_self  = sprintf('PsthWarped%sSelf', base);
+        field_other = sprintf('PsthWarped%sOther', base);
+    end
+
+    % Add mappings to the cell array
+    psth_map = [psth_map; {field_self, var_self}; {field_other, var_other}];
+end
+
+
+vars_to_load = { ...
+    "initial_cluster", "AREAS", "allareas", ...
+    "all_psth_zscore", "all_psth_zscore_offset", "all_psth_FR_pblimit", ...
+    "all_psth_PB_warped","all_psth_PB_warped_corrected", "good_clusters", "depth_or_Chn", ...
+    "all_psth_FR", "all_psth_FR_offset",...
+    "all_mean_std","all_psth_shuffled_PB_warped","all_psth_shuffled_PB_warped_corrected"};
+
+% Add the common base variables
+vars_to_load = [vars_to_load, ...
+    "all_psth_self_warped", "all_psth_other_warped","all_psth_shuffled_self_warped","all_psth_shuffled_other_warped"];
+
+% Add the per-behavior ones dynamically
+for b = 2:numel(behavior_labels) % start from 2 to skip 'play' (already added above)
+    label = behavior_labels{b};
+    vars_to_load = [vars_to_load, ...
+        sprintf("all_psth_self_warped_%s", label), ...
+        sprintf("all_psth_other_warped_%s", label)...
+        sprintf("all_psth_shuffled_self_warped_%s", label), ...
+        sprintf("all_psth_shuffled_other_warped_%s", label)];
+end
+n_partners = 2;
+for pn = 1:n_partners
+    partner_label = sprintf('Partner%d', pn);
+
+    vars_to_load = [vars_to_load, ...
+        sprintf('all_psth_self_warped_%s', partner_label), ...
+        sprintf('all_psth_other_warped_%s', partner_label), ...
+        sprintf('all_psth_shuffled_self_warped_%s', partner_label), ...
+        sprintf('all_psth_shuffled_other_warped_%s', partner_label), ...
+        sprintf('all_psth_PB_warped_%s', partner_label), ...
+        sprintf('all_psth_shuffled_PB_warped_%s', partner_label) ...
+        ];
+end
+
+
+
+
+%% Select rats
+
+B1D1 = [1 2 3];
+B1S3 = [4 5 6];
+B2S2 = [7 8 9];
+B3D2 = 10;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%% %%%%%%%%%%%%%%%%%CHECK THISSSSSS
+B4D4 = [11 11] ; %   0 if medial 1 if lateral %% Dual 4rd Batch Probe 1
+B4S2 = [12 12];                              %% Single 4rd Batch Probe 1
+
+Npx2Probe={'Medial','Lateral'};
+medial_lateral_probe=[0 0 0 0 0  0 0 0 0 0  1 0  0 0 0  0 1  ]; %   1 if medial and 0 if lateral
+probes=[              1 1 1 1 1  1 1 1 1 0  3 1  1 1 1  1 3  ]; %    3 is medial and 1 is lateral     for B4S2, oposite if it is B4D4
+
+MorL = {'_','_','_','_','_', '_','_','_','_','_', 'Med','Lat', 'mPFC','mPFC','mPFC' , 'Med' , 'Lat'};
+% thisrat=[ B1D1 B1S3 B2S2 B3D2 B4S2 B1D1 B4D4];
+
+
+
+PAG_mPFC=[            1 1 1 1 1  1 1 1 1 1  1 1  2 2 2  1 1  ]; % 1 for PAG , 2 for mPFC
+
+length_duration_threshold=0.25;
+wrap_bins=20;
+alpha = 0.05;
+
+
+ONOFFsets = 2;
+%% select exact rats to load
+
+
+thisrat=[ B1D1, B1S3, B2S2, B3D2, B4S2  ];minus_areas=0;
+bf_i = 1;
+
+your_area={'DR','VLPAG','LPAG','DLPAG','SupCol'};
+
+playbout_tittle='PlayBout';
+
+%% define play for play bout
+
+behaviors2check={'Pounce_A','CC','Pin','Boxing','Evasion','CB','Pounce_B','Escape','CD', ...
+    'Rearing','Grooming','Scratch','Pounce_Ai','Pounce_Bi','Sniffing','Bite'};
+
+
+%% load behavior files and  load data
+AREAS=[];
+depth = [];
+full_areas = [];
+
+all_pvalues=[];
+all_coefficients= [];
+
+
+
+
+behavior_files = dir('*.txt');
+
+
+
+
+
+
+for bf = thisrat
+
+    aux_mydate=behavior_files(bf).name(6:9);
+    ani_ID=behavior_files(bf).name(1:4);
+
+    if str2double(behavior_files(bf).name(2))>3
+        mydate=['2024' aux_mydate];
+    else
+        mydate=['2023' aux_mydate];
+    end
+
+    path_mati='\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\Responses_Matrix\ModelCriterion\';
+
+    load([path_mati 'ResponsesMatrix_PPB_p1andp2_' num2str(length_duration_threshold) 's_' playbout_tittle '_' mydate '_' behavior_files(bf).name(1:4) '_' MorL{bf_i} '.mat'],"initial_cluster","AREAS","RM_areas","all_psth_zscore", ...
+        "pre_onset","post_onset","pre_offset","post_offset","all_psth_zscore_offset","all_this_psth","this_psth_shuffled","est_full","pval_full","mod_wrap", ...
+        "good_clusters","depth_or_Chn","all_psth_FR","all_psth_FR_offset")
+
+    path_migue='\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\Responses_Matrix\ModelCriterion_Onset_Miguel\';
+
+    load([path_migue 'ResponsesMatrix_PPB_p1andp2_' num2str(length_duration_threshold) 's_' playbout_tittle '_' mydate '_' behavior_files(bf).name(1:4) '_' MorL{bf_i} '.mat'] , vars_to_load{:})
+
+
+
+
+    depth = depth_or_Chn;
+
+    % ON SET and OFF SET modulation indexes WARP
+
+    % Inhibition and Excitation based on LOCAL difference with shuffle
+    aux                     =        all_this_psth; %% PSTH warped   
+    
+    full_zsc_warp_shuffled = this_psth_shuffled; %% PSTH warped SHUFFLED
+    significant_indexes_exc =nan(size(full_zsc_warp_shuffled,2),1);
+    significant_indexes_inh =nan(size(full_zsc_warp_shuffled,2),1);
+    for j=1:size(full_zsc_warp_shuffled,2)
+ 
+
+        sh_FR_after_onset=mean(full_zsc_warp_shuffled{j}(:,time_indxs),2,"omitmissing");
+
+        FR_after_onset=mean(aux(:,time_indxs),2,"omitmissing");
+        p_exc = mean(FR_after_onset(j) < sh_FR_after_onset); % p-value for being greater
+        p_inh = mean(FR_after_onset(j) > sh_FR_after_onset); % p-value for being smaller
+
+        significant_indexes_exc(j) = (p_exc < alpha);
+        significant_indexes_inh(j) = (p_inh < alpha);
+
+    end
+
+
+
+    Significance = struct();
+    all_P_val = struct();
+    for a = {'self','other'}
+        for b = behavior_labels
+            Significance.(a{1}).(b{1}).exc  = nan(numel(good_clusters),1);
+            Significance.(a{1}).(b{1}).inh  = nan(numel(good_clusters),1);
+            all_P_val.(a{1}).(b{1})          = nan(numel(good_clusters),n_wapred_bins);
+          
+        end
+    end
+
+    % --- Loop over all combinations ---
+    animal_labels  = {'self','other'};
+    shuffle_label  = 'shuffled_';  % only compare real vs shuffled
+    
+
+animal_labels = {'self', 'other'};
+shuffle_label = 'shuffled_';
+partner_labels = arrayfun(@(pn) sprintf('Partner%d', pn), 1:n_partners, 'UniformOutput', false);
+
+% Combine behaviors and partners into one list
+all_labels = [behavior_labels, partner_labels];
+
+for a = 1:numel(animal_labels)
+    for b = 1:numel(all_labels)
+        label = all_labels{b};
+
+        % --- Build PSTH variable names dynamically ---
+        if strcmp(label, 'play')
+            real_var        =   sprintf('all_psth_%s_warped', animal_labels{a});
+            shuffled_var = sprintf('all_psth_shuffled_%s_warped', animal_labels{a});
+        else
+            real_var     = sprintf('all_psth_%s_warped_%s', animal_labels{a}, label);
+           
+            shuffled_var = sprintf('all_psth_shuffled_%s_warped_%s', animal_labels{a}, label);
+        end
+
+        % --- Skip missing variables ---
+        if ~exist(real_var, 'var') || ~exist(shuffled_var, 'var')
+            fprintf('Skipping missing variable: %s or %s\n', real_var, shuffled_var);
+            continue;
+        end
+
+        % --- Extract PSTH matrices ---
+        aux = eval(real_var);
+      
+        psth_warp_shuffled = eval(shuffled_var);
+        
+        % --- Compute significance for each neuron/cluster ---
+        if ~isempty(psth_warp_shuffled) && numel(psth_warp_shuffled) >= 1 && size(psth_warp_shuffled{1}, 2) > 1
+            n_clusters = size(aux, 1);
+            Significance.(animal_labels{a}).(label).exc = nan(n_clusters, 1);
+            Significance.(animal_labels{a}).(label).inh = nan(n_clusters, 1);
+
+           
+            for j = 1:n_clusters
+
+
+                shufled_data = psth_warp_shuffled{j};
+                this_psth = aux(j, :);
+                if std(this_psth(baseline_index), "omitmissing")>0 
+                    this_psth  = (this_psth - mean(this_psth(baseline_index), "omitmissing"))/std(this_psth(baseline_index), "omitmissing");
+                elseif std(this_psth, "omitmissing")>0
+                       this_psth  = (this_psth - mean(this_psth(baseline_index), "omitmissing"))/std(this_psth, "omitmissing");
+                else
+                     this_psth  =nan(size(this_psth));
+                end
+
+
+
+
+                for sn = 1:size(sh_FR_after_onset,1)
+                        if std(shufled_data(sn,baseline_index), 'omitmissing')>0
+                            shufled_data(sn,:) = (shufled_data(sn,:) -mean(shufled_data(sn,baseline_index) , 'omitmissing'))/std(shufled_data(sn,baseline_index), 'omitmissing');
+                        elseif std(shufled_data(sn,:), 'omitmissing')>0
+                             shufled_data(sn,:) = (shufled_data(sn,:) -mean(shufled_data(sn,baseline_index) , 'omitmissing'))/std(shufled_data(sn,:), 'omitmissing');
+                        else
+                             shufled_data(sn,:) = nan(size( shufled_data(sn,:)));
+                        end
+                end
+
+
+                
+
+                sh_FR_after_onset = mean(shufled_data(:, time_indxs), 2, "omitmissing");
+
+                significnat_psth = sum(shufled_data>this_psth)./sum(~isnan(shufled_data));
+                significant_psth(all(shufled_data == this_psth,1)) = .5;
+               
+               
+              
+               
+                FR_after_onset    = mean(this_psth(time_indxs), "omitmissing");
+                if all(all(isnan(shufled_data)))
+                    p_exc = 1;
+                    p_inh = 1;
+                else
+                    all_P_val.(animal_labels{a}).(label)(j,:) = significnat_psth;
+                    p_exc = mean(FR_after_onset < sh_FR_after_onset); % Excitation test
+                    p_inh = mean(FR_after_onset > sh_FR_after_onset); % Inhibition test
+                end
+                Significance.(animal_labels{a}).(label).exc(j) = p_exc ;
+                Significance.(animal_labels{a}).(label).inh(j) = p_inh;
+            end
+        else
+            fprintf('No shuffled data available for %s (%s)\n', animal_labels{a}, label);
+        end
+    end
+end
+
+
+    session_name = behavior_files(bf).name;
+    session_name =  strsplit(session_name, '.');
+    session_name = session_name{1};
+   pctg_cell_matching= 100*sum(ismember(all_neurons_TD.session,session_name) & ismember(all_neurons_TD.cluster_id, good_clusters))/sum(ismember(all_neurons_TD.session,session_name));
+    disp([session_name , ' ',  num2str(pctg_cell_matching), '% match'])
+
+
+
+    significant_indexes_exc = logical(significant_indexes_exc);
+    significant_indexes_inh = logical(significant_indexes_inh);
+   all_neurons_TD_MASK = ismember(all_neurons_TD.session,session_name) & ismember(all_neurons_TD.cluster_id, good_clusters);
+   loaded_data_mask = ismember(good_clusters,all_neurons_TD.cluster_id(ismember(all_neurons_TD.session,session_name)));
+
+   good_cluster_match = nan(size(good_clusters,2),4);
+
+   for gc_n = 1:size(good_cluster_match,1)
+
+       good_cluster_match(gc_n,1)  = find(ismember(all_neurons_TD.session,session_name) & all_neurons_TD.cluster_id==good_clusters(gc_n));
+       good_cluster_match(gc_n,2) = gc_n;
+
+       good_cluster_match(gc_n,3)  = all_neurons_TD.cluster_id(find(ismember(all_neurons_TD.session,session_name) & all_neurons_TD.cluster_id==good_clusters(gc_n)));
+       good_cluster_match(gc_n,4) = good_clusters(gc_n);
+
+
+
+       good_cluster_match(gc_n,5) = depth_or_Chn(gc_n);
+       good_cluster_match(gc_n,6)  = all_neurons_TD.depth(find(ismember(all_neurons_TD.session,session_name) & all_neurons_TD.cluster_id==good_clusters(gc_n)));
+       good_cluster_match(gc_n,7)  = bf;
+
+
+
+
+   end
+
+good_cluster_match = array2table(good_cluster_match);
+good_cluster_match.Properties.VariableNames = {'IndexIn_all_neurons_TD','IndexIn_good_cluster','IndexIn_all_neurons_TD_clusterID','good_cluster_CLusterID','IndexIn_all_neurons_TD_depth','good_cluster_depth', 'bf'};
+ all_matched_tables = [all_matched_tables;good_cluster_match];
+
+    %%%% 1 Exited %%%%
+    all_neurons_TD.Exited( good_cluster_match.IndexIn_all_neurons_TD) = ...
+        significant_indexes_exc(good_cluster_match.IndexIn_good_cluster);
+    %%%% 2 Inhibited %%%%
+    all_neurons_TD.Inhibited( good_cluster_match.IndexIn_all_neurons_TD) = ...
+        significant_indexes_inh(good_cluster_match.IndexIn_good_cluster);
+
+    %%% all remaining inhibited an exited %%%
+
+
+    for a = 1:numel(animal_labels)
+        animal = animal_labels{a};
+
+        for b = 1:numel(behavior_labels)
+            behavior = behavior_labels{b};
+
+            % Build field name
+            field_name = sprintf('Exited_%s_%s', animal, behavior);
+            % Assign significance results
+            all_neurons_TD.(field_name)(good_cluster_match.IndexIn_all_neurons_TD) = ...
+                Significance.(animal).(behavior).exc(good_cluster_match.IndexIn_good_cluster);
+
+            % Build field name
+            field_name = sprintf('Inhibited_%s_%s', animal, behavior);
+            % Assign significance results
+            all_neurons_TD.(field_name)(good_cluster_match.IndexIn_all_neurons_TD) = ...
+                Significance.(animal).(behavior).inh(good_cluster_match.IndexIn_good_cluster);
+            all_neurons_TD.(pval_fields{b,a})(good_cluster_match.IndexIn_all_neurons_TD,:) = all_P_val.(animal).(behavior)(good_cluster_match.IndexIn_good_cluster,:);
+
+           
+        end
+    end
+
+
+
+    %%%% 3 PsthWarped %%%%
+    all_neurons_TD.PsthWarped( good_cluster_match.IndexIn_all_neurons_TD,:) = ...
+        all_psth_PB_warped(good_cluster_match.IndexIn_good_cluster,:);
+    %%%% 4 PsthOnset %%%%
+    all_neurons_TD.PsthOnset( good_cluster_match.IndexIn_all_neurons_TD,:) = ...
+        all_psth_zscore(good_cluster_match.IndexIn_good_cluster,:);
+
+
+
+    for i = 1:size(psth_map,1)
+        
+        field_name  = psth_map{i,1};
+        source_name = psth_map{i,2};
+       
+        if exist(source_name, 'var')
+            data = eval(source_name);
+            all_neurons_TD.(field_name)(good_cluster_match.IndexIn_all_neurons_TD,:) = ...
+                data(good_cluster_match.IndexIn_good_cluster,:);
+        else
+            warning('Variable %s not found in workspace, skipping %s.', source_name, field_name);
+        end
+    end
+
+
+
+
+
+
+
+
+       
+
+bf_i = bf_i+1;
+end
+
+
+
+%% save if eneded
+% save([saving_folder,'\all_neurons_TD.mat'],'all_neurons_TD');
+play_song([],[],[])
+
+%% load table directly if needed
+n_wapred_bins = 60;
+warped_time     = (((1:n_wapred_bins)/20)*5) - 5 ;
+baseline = [-5 0];
+baseline_index      = warped_time>=baseline(1) & warped_time<=baseline(2);
+
+response_time = [0 5];
+time_indxs      = warped_time>=response_time(1) & warped_time<=response_time(2);
+saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
+load([saving_folder,'\all_neurons_TD.mat'],'all_neurons_TD');
+
+%% exitedn inhibited analysis
+% play_song([],[],[])
+play_behaviors      = {'CH','POA','POB','EV','ES','CB','CD'};
+play_behaviors      = {'CH','POA','POB','EV','ES','CB','CD'};
+% play_behaviors      = {,'POA','POB'};
+% play_behaviors      = {'POA'};
+non_play_behaviors  = {'PWIA','PWIB','GR','SN','RE'};
+% non_play_behaviors  = {'PWIA'};
+slef_other_condition = {'self','other'}
+% slef_other_condition = {'self'};
+% non_play_behaviors  = {'PWIA','PWIB'};
+ % non_play_behaviors  = {'GR','SN','RE'};
+ 
+alpha_level_bf = 0.05/numel(play_behaviors);
+
+exited_play_list = cell2mat(cellfun(@(x) contains(x,'Exited')  &  contains(x,play_behaviors)  &  contains(x,slef_other_condition), all_neurons_TD.Properties.VariableNames, 'UniformOutput',false));
+inhibited_play_list = cell2mat(cellfun(@(x) contains(x, 'Inhibited') &  contains(x,play_behaviors) &  contains(x,slef_other_condition), all_neurons_TD.Properties.VariableNames, 'UniformOutput',false));
+exited_non_play_list = cell2mat(cellfun(@(x) contains(x,'Exited')  &  contains(x,non_play_behaviors) &  contains(x,slef_other_condition), all_neurons_TD.Properties.VariableNames, 'UniformOutput',false));
+inhibited_non_play_list = cell2mat(cellfun(@(x) contains(x, 'Inhibited') &  contains(x,non_play_behaviors) &  contains(x,slef_other_condition), all_neurons_TD.Properties.VariableNames, 'UniformOutput',false));
+
+exited_play_labels = all_neurons_TD.Properties.VariableNames(exited_play_list);
+inhibited_play_labels = all_neurons_TD.Properties.VariableNames(inhibited_play_list);
+exited_non_play_labels = all_neurons_TD.Properties.VariableNames(exited_non_play_list);
+inhibited_non_play_labels = all_neurons_TD.Properties.VariableNames(inhibited_non_play_list);
+
+contradictory_indexes = all_neurons_TD{: ,exited_play_list}<alpha_level_bf & all_neurons_TD{: ,inhibited_play_list}<alpha_level_bf;
+contradictory_indexes(isnan(contradictory_indexes)) = 1;
+contradictory_indexes = contradictory_indexes==1;
+exited_play         = double(all_neurons_TD{: ,exited_play_list}<alpha_level_bf);
+exited_play(contradictory_indexes) = NaN;
+exited_play         = sum(exited_play,2, 'omitmissing')/size(exited_play,2);
+
+
+inhibited_play         = double(all_neurons_TD{: ,inhibited_play_list}<alpha_level_bf);
+inhibited_play(contradictory_indexes) = NaN;
+inhibited_play         = sum(inhibited_play,2, 'omitmissing')/size(inhibited_play,2);
+modulated_play    = sum(exited_play+inhibited_play,2, 'omitmissing')/size(exited_play,2);
+
+contradictory_indexes = all_neurons_TD{: ,exited_non_play_list}<alpha_level_bf & all_neurons_TD{: ,inhibited_non_play_list}<alpha_level_bf;
+contradictory_indexes(isnan(contradictory_indexes)) = 1;
+contradictory_indexes = contradictory_indexes==1;
+
+exited_non_play         = double(all_neurons_TD{: ,exited_non_play_list}<alpha_level_bf);
+exited_non_play(contradictory_indexes) = NaN;
+exited_non_play         = sum(exited_non_play,2, 'omitmissing')/size(exited_non_play,2);
+
+
+inhibited_non_play         = double(all_neurons_TD{: ,inhibited_non_play_list}<alpha_level_bf);
+inhibited_non_play(contradictory_indexes) = NaN;
+inhibited_non_play         = sum(inhibited_non_play,2, 'omitmissing')/size(inhibited_non_play,2);
+modulated_play_non_play =  sum(inhibited_non_play+exited_non_play,2, 'omitmissing')/size(inhibited_non_play,2);
+
+
+figure
+alpha_level  = 0.01;
+non_entrained_lvl = 0.1;
+
+
+
+
+
+area_list = {'SupCol','DLPAG','LPAG','VLPAG','DR'};
+cell_type = {'peak','trough','non-entrained'};
+
+pctg_ones_per_area = nan(numel(area_list),3);
+for an=1:numel(area_list)
+    
+    area_index              = ismember(all_neurons_TD.area, area_list{an});
+    entrainment_index       = all_neurons_TD.DeltaEntireSession.PPCPval<alpha_level;
+    non_entrained_index     = all_neurons_TD.DeltaEntireSession.PPCPval>non_entrained_lvl;
+    peak_index              = all_neurons_TD.DeltaEntireSession.PreferedAngle>-pi/2 & all_neurons_TD.DeltaEntireSession.PreferedAngle<pi/2;
+    analysed                    = ~isnan(all_neurons_TD.Exited);
+    
+
+    peak_cells          = analysed  & area_index & entrainment_index & peak_index;
+    trough_cells        = analysed  & area_index & entrainment_index & ~peak_index;
+    non_entrained_cells = analysed  & area_index & non_entrained_index;
+    x_label = {'% of Exited', 'Playful behaviors'};
+     y_label = {'% of Exited', 'Non-playful behaviors'};
+
+    types_cell = {peak_cells,trough_cells,non_entrained_cells};
+    p_per_type = nan(3,1);
+    for tn= 1:3
+        subplot(numel(area_list), 1, an)
+        hold on
+        % play_counts = [;inhibited_play(types_cell{tn})];
+        % non_play_counts = [;inhibited_non_play(types_cell{tn})];
+        % x12compare  = exited_play(types_cell{tn});
+        % x22compare  = exited_non_play(types_cell{tn});
+    % x12compare  = modulated_play(types_cell{tn} & modulated_play>0);
+    %     x22compare  = modulated_play_non_play(types_cell{tn} & modulated_play>0);
+
+        x12compare  = exited_play(types_cell{tn} & exited_play>0);
+        x22compare  = exited_non_play(types_cell{tn} & exited_play>0);
+        rand_x      = (rand(numel(exited_play(types_cell{tn} & exited_play>0)),2)-.5)/2;
+        rand_x1      = (rand(numel(x12compare),1)-.5);
+        rand_x2      = (rand(numel(x22compare),1)-.5)/5;
+        what2plot =  -(x12compare-x22compare)./(x12compare+x22compare);
+        
+        pctg_ones_per_area(an,tn) = sum(what2plot==-1)/numel(what2plot);
+        % what2plot = what2plot(what2plot~=-1)
+        % what2plot = x12compare;
+
+        % 
+        % plot((rand_x + ones(numel(x12compare),2)*diag([1 2]))', [x12compare x22compare]', ':k')
+        % hold on
+        %  plot((rand_x + ones(numel(x22compare ),2)*diag([1 2]))', [x12compare x22compare]', '.k', 'MarkerSize',5)
+
+       swarmchart(what2plot*0 +tn,what2plot, 'ko')
+
+        hold on
+       plot(tn, mean( what2plot, 'omitmissing'), '_r', 'MarkerSize', 10, 'LineWidth',2)
+        % plot(median(x12compare), median(x22compare), 'xr', 'MarkerSize',10)
+        if ~isempty(what2plot)
+            [p,h] = signrank(what2plot);
+        else
+            p = NaN;
+        end
+            p_per_type(tn) = p;
+        % swarmchart([play_counts*0;non_play_counts*0+1],[play_counts;non_play_counts],'.k')
+        % ylim([-1 1])
+        % if p<0.01
+        % title(num2str(p), 'Color','r')
+        % else
+        %     title(num2str(p))
+        % end
+        % min_min = min([x22compare+rand_x1; x22compare+rand_x2]);
+        % max_max = max([x22compare+rand_x1; x22compare+rand_x2]);
+        % hold on
+        % plot([min_min max_max],[min_min max_max], 'r')
+        % axis tight
+        % if tn==1
+            ylabel(y_label)
+        % end
+        if an==numel(area_list)
+            xlabel(x_label)
+            xticks(1:3)
+            xticklabels(cell_type)
+        end
+        xlim([0 4])
+    end
+    title(num2str(p_per_type'))
+end
+%%
+figure
+for tn= 1:3
+    subplot(1,3,tn)
+    bar(pctg_ones_per_area(:,tn))
+    ylim([0 1])
+    xticklabels(area_list)
+    title(cell_type{tn})
+end
+%%
+alpha_level_corr = 0.05/15;
+figure
+area_list = {'SupCol','DLPAG','LPAG','VLPAG','DR'};
+cell_type = {'non-entrained','peak','trough'};
+
+for an=1:numel(area_list)
+    
+    area_index              = ismember(all_neurons_TD.area, area_list{an});
+    entrainment_index       = all_neurons_TD.DeltaEntireSession.PPCPval<alpha_level;
+    non_entrained_index     = all_neurons_TD.DeltaEntireSession.PPCPval>non_entrained_lvl;
+    peak_index              = all_neurons_TD.DeltaEntireSession.PreferedAngle>-pi/2 & all_neurons_TD.DeltaEntireSession.PreferedAngle<pi/2;
+    analysed                    = ~isnan(all_neurons_TD.Exited);
+    
+
+    peak_cells          = analysed  & area_index & entrainment_index & peak_index;
+    trough_cells        = analysed  & area_index & entrainment_index & ~peak_index;
+    non_entrained_cells = analysed  & area_index & non_entrained_index;
+    
+    types_cell = {non_entrained_cells,peak_cells,trough_cells};
+    
+    for tn= 1:3
+        subplot(numel(area_list), 3, (an-1)*3  + tn)
+        % play_counts = [;inhibited_play(types_cell{tn})];
+        % non_play_counts = [;inhibited_non_play(types_cell{tn})];
+        % x12corr = exited_play(types_cell{tn});
+        % x22corr = inhibited_non_play(types_cell{tn});
+         x12corr = inhibited_non_play(types_cell{tn});
+        x22corr = exited_play(types_cell{tn});
+        rand_x = (rand(numel(x12corr),1))/5;
+        rand_y = (rand(numel(x22corr),1))/5;
+
+        % plot((rand_x + ones(numel(exited_play(types_cell{tn})),2)*diag([1 2]))', [exited_play(types_cell{tn}) exited_non_play(types_cell{tn})]', ':k')
+        % hold on
+        %  plot((rand_x + ones(numel(exited_play(types_cell{tn}) ),2)*diag([1 2]))', [exited_play(types_cell{tn}) exited_non_play(types_cell{tn})]', '.k', 'MarkerSize',5)
+        
+        plot(x12corr+rand_x, x22corr+rand_y, '.')
+
+            % [p,h] = signrank(exited_play(types_cell{tn}), exited_non_play(types_cell{tn}))
+            [c,p] = corr(x12corr,x22corr, 'Type', 'Spearman')
+        % swarmchart([play_counts*0;non_play_counts*0+1],[play_counts;non_play_counts],'.k')
+        ylim([-1 1])
+        if p<alpha_level_corr
+        title(num2str([c,p]), 'Color','r')
+        else
+            title(num2str([c,p]))
+        end
+        axis([-.2 1 -.2 1])
+
+    end
+end
+
+
+      
+%%
+c_lim = [-2 2];
+% c_lim = 'auto'
+figure
+alpha = 0.01;
+condition = 'Exited';
+psth2plot1 = 'PsthWarped';
+% psth2plot1 = 'PsthWarpedPvalPOASelf';
+psth2plot2 = 'PsthWarped';
+% psth2plot2 = 'PsthWarpedPvalPWIASelf'
+this_area = {'LPAG'};
+subplot(4,1,1)
+trough_cells    = all_neurons_TD.DeltaEntireSession.PPCPval<=alpha & (all_neurons_TD.DeltaEntireSession.PreferedAngle>pi/2   | all_neurons_TD.DeltaEntireSession.PreferedAngle<-pi/2);
+peak_cells      = all_neurons_TD.DeltaEntireSession.PPCPval<=alpha & ~(all_neurons_TD.DeltaEntireSession.PreferedAngle>pi/2   | all_neurons_TD.DeltaEntireSession.PreferedAngle<-pi/2);
+% cond1 = trough_cells & all_neurons_TD.(condition)==1 & ismember(all_neurons_TD.area, this_area);
+% cond2 = peak_cells & all_neurons_TD.(condition)==1 & ismember(all_neurons_TD.area, this_area);
+cond1 = trough_cells & ismember(all_neurons_TD.area, this_area);
+cond2 = peak_cells  & ismember(all_neurons_TD.area, this_area);
+matrtix2plot1 = all_neurons_TD.(psth2plot1)(cond1,:);
+
+for j=1:size(matrtix2plot1,1)
+    if std(matrtix2plot1(j,baseline_index), 'omitmissing')>0
+        matrtix2plot1(j,:) = (matrtix2plot1(j,:) - mean(matrtix2plot1(j,baseline_index), 'omitmissing'))/std(matrtix2plot1(j,baseline_index), 'omitmissing');
+    else
+         matrtix2plot1(j,:) = NaN;
+    end
+end
+
+matrtix2plot1(abs(matrtix2plot1)>4) = NaN;
+
+imagesc(warped_time, 1:size(matrtix2plot1,1),matrtix2plot1)
+axis xy
+clim(c_lim)
+
+
+
+subplot(4,1,2)
+matrtix2plot2 = all_neurons_TD.(psth2plot2)(cond2,:);
+for j=1:size(matrtix2plot2,1)
+    if std(matrtix2plot2(j,baseline_index), 'omitmissing')>0
+        matrtix2plot2(j,:) = (matrtix2plot2(j,:) - mean(matrtix2plot2(j,baseline_index), 'omitmissing'))/std(matrtix2plot2(j,baseline_index), 'omitmissing');
+    else
+         matrtix2plot2(j,:) = NaN;
+    end
+end
+matrtix2plot2(abs(matrtix2plot2)>4) = NaN;
+imagesc(warped_time, 1:size(matrtix2plot2,1),matrtix2plot2)
+axis xy
+clim(c_lim)
+
+
+subplot(4,1,3:4)
+
+[~, ~, ci] = ttest(matrtix2plot2);
+no_nan = ~any(isnan(ci));
+
+fill([warped_time fliplr(warped_time(no_nan))],[ci(1,:) fliplr(ci(2,no_nan))], 'k', 'FaceAlpha',.2, 'EdgeColor','none')
+hold on
+plot(warped_time, mean(matrtix2plot2, 'omitmissing'), 'k' )
+
+[~, ~, ci] = ttest(matrtix2plot1);
+no_nan = ~any(isnan(ci));
+fill([warped_time fliplr(warped_time(no_nan))],[ci(1,:) fliplr(ci(2,no_nan))], 'r', 'FaceAlpha',.2, 'EdgeColor','none')
+plot(warped_time, mean(matrtix2plot1, 'omitmissing'), 'r' )
+
+
+
+%%
+
+c_lim = [-2 2];
+% c_lim = 'auto'
+figure
+this_area = {'SupCol'}
+so =1;
+for self_other = {'Self','Other' }
+    if ismember('Self', self_other)
+    behavior_list = {'PsthWarped','PsthWarpedCHSelf','PsthWarpedEVSelf','PsthWarpedESSelf','PsthWarpedCDSelf','PsthWarpedCBSelf','PsthWarpedPOASelf', ...
+        'PsthWarpedPOBSelf','PsthWarpedPWIASelf','PsthWarpedPWIBSelf','PsthWarpedGRSelf','PsthWarpedSNSelf','PsthWarpedRESelf'}
+
+    else
+
+    behavior_list = {'PsthWarped','PsthWarpedCHOther','PsthWarpedEVOther','PsthWarpedESOther','PsthWarpedCDOther','PsthWarpedCBOther','PsthWarpedPOAOther', ...
+        'PsthWarpedPOBOther','PsthWarpedPWIAOther','PsthWarpedPWIBOther','PsthWarpedGROther','PsthWarpedSNOther','PsthWarpedREOther'}
+    end
+    behavior_labels = {'Play Bout','Chasing','Evasion','Escape','Darting','Playful Approach','Pounce Neck','Pounce Back','PWI (neck)','PWI (back)', 'Grooming','Sniffing','Rearing'}
+    for   bn = 1:numel(behavior_list)
+        condition = 'Exited';
+        psth2plot1 = behavior_list{bn};
+
+        trough_cells = all_neurons_TD.ThetaEntireSession.PPCPval<0.05 & (all_neurons_TD.ThetaEntireSession.PreferedAngle>pi/2 | all_neurons_TD.ThetaEntireSession.PreferedAngle<pi/2);
+
+        subplot(6,numel(behavior_list),bn + (so-1)*numel(behavior_list)*3)
+        matrtix2plot1 = all_neurons_TD.(psth2plot1)( ismember(all_neurons_TD.area, this_area) & trough_cells,:);
+
+        for j=1:size(matrtix2plot1,1)
+            if std(matrtix2plot1(j,baseline_index), 'omitmissing')>0
+                matrtix2plot1(j,:) = (matrtix2plot1(j,:) - mean(matrtix2plot1(j,baseline_index), 'omitmissing'))/std(matrtix2plot1(j,baseline_index), 'omitmissing');
+            else
+                matrtix2plot1(j,:) = NaN;
+            end
+        end
+
+        matrtix2plot1(abs(matrtix2plot1)>4) = NaN;
+
+        imagesc(warped_time, 1:size(matrtix2plot1,1),matrtix2plot1)
+        axis xy
+        clim(c_lim)
+        title([behavior_labels{bn}, ' ', self_other{1}])
+
+
+
+
+
+        subplot(6,numel(behavior_list),numel(behavior_list)*[1 2]+bn + (so-1)*numel(behavior_list)*3)
+        hold on
+
+        [~, ~, ci] = ttest(matrtix2plot1);
+        no_nan = ~any(isnan(ci));
+        fill([warped_time fliplr(warped_time(no_nan))],[ci(1,:) fliplr(ci(2,no_nan))], 'r', 'FaceAlpha',.2, 'EdgeColor','none')
+        plot(warped_time, mean(matrtix2plot1, 'omitmissing'), 'r' )
+        ylim([-2 2])
+        % title(sum(ismember(all_neurons_TD.area, this_area) & trough_cells)/sum(ismember(all_neurons_TD.area, this_area)))
+
+    end
+    so = so+1;
+    sgtitle(this_area)
+
+
+
+end
+

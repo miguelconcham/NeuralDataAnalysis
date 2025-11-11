@@ -5,23 +5,23 @@ saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OP
 % f          = 4:.1:15;      % frequency range for spectrogram
 % freq_range = [6 12]; 
 
-f          = .01:.05:7;      % frequency range for spectrogram
-freq_range = [.1 6]; 
-
+f          = .1:.05:6;      % frequency range for spectrogram
+freq_range = [.1 5]; 
+wind_params = [1 .995];
 n_strctut = 1;
 
 psth_structure = [];
 animal_names = [];
 %%
-for fn = 7:numel(list_of_animals)
+for fn = 1:numel(list_of_animals)
 
     if fn==1
-        psth_structure =GENERATE_THETA_PSTH_CALLS(list_of_animals{fn}, f, freq_range)
+        psth_structure =GENERATE_THETA_PSTH_CALLS(list_of_animals{fn}, f, freq_range,wind_params);
         n_strctut = n_strctut+numel(psth_structure);
         animal_names = [animal_names;[repmat({list_of_animals{fn}},numel(psth_structure),1), num2cell(1:numel(psth_structure))']]
     else
 
-        transt_psth = GENERATE_THETA_PSTH_CALLS(list_of_animals{fn}, f, freq_range)
+        transt_psth = GENERATE_THETA_PSTH_CALLS(list_of_animals{fn}, f, freq_range,wind_params);
       
         for sub_j=1:numel(transt_psth)
     
@@ -37,8 +37,8 @@ end
 
 %% saving
 
-save([saving_folder,'\psth_structure_call.mat'],'psth_structure');
-save([saving_folder,'\animal_names_call.mat'],'animal_names');
+save([saving_folder,'\psth_structure_call_delta.mat'],'psth_structure');
+save([saving_folder,'\animal_names_call_delta.mat'],'animal_names');
 
 %% mergin data
 
@@ -194,7 +194,7 @@ time_matrix = repmat(limted_time, nTrials, 1);
 tbl.Time = time_matrix(:);
 
 % Loop over bins
-for i = 1992:nTime
+for i = 1:nTime
     tbl_t = tbl(tbl.Time == limted_time(i),:);
     if sum(~isnan(tbl_t.Power))>10
     lme = fitlme(tbl_t,'Power ~ 1 + (1|Subject)');
@@ -223,7 +223,7 @@ results.pvals = pvals;
 results.pvals_fdr = pvals_fdr;
 results.d = d;
 %%
-save([saving_folder,'\results_call.mat'],'results');
+save([saving_folder,'\results_call_updated_Delta.mat'],'results');
 %%
 
 

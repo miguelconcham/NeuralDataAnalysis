@@ -67,7 +67,7 @@ if NPX_Type == 1
   end
 
 else
-    load([current_dir,'\ChannelMap.mat'], 'xcoords', 'ycoords','chanMap')
+    load([current_dir,'\chann_map_PAG.mat'], 'xcoords', 'ycoords','chanMap')
 
   
     

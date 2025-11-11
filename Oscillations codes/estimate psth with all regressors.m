@@ -51,6 +51,7 @@ save([saving_folder,'\psth_structure_all_regressors_delta_theta.mat'],'psth_stru
 save([saving_folder,'\animal_names_all_regressors_delta.mat'],'animal_names');
 
 %%
+saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
 
 load([saving_folder,'\psth_structure_all_regressors_delta_theta.mat'],'psth_structure'); 
 load([saving_folder,'\animal_names_all_regressors_delta.mat'],'animal_names');
@@ -561,11 +562,16 @@ play_song([],[],[])
 save([saving_folder,'\cvResults_mean_calls_delta_v2_AlllVar.mat'],'cvResults')
 %% load data if needed
 load([saving_folder,'\cvResults_mean_calls_delta_v2_AlllVar.mat'],'cvResults')
-load([saving_folder,'\cvResults_mean_calls_theta_v2_AlllVar.mat'],'cvResults')
+% load([saving_folder,'\cvResults_mean_calls_theta_v2_AlllVar.mat'],'cvResults')
 
 
 %% plot each varaible R2 contribution
-
+k = cvResults.k;
+mse_full_allfolds = cvResults.mse_full_allfolds;
+r2_full_allfolds = cvResults.r2_full_allfolds;
+avgMSE_full = mean(mse_full_allfolds);
+avgR2_full = mean(r2_full_allfolds);
+predictors = cvResults.predictors;
 y_for_sig = 20;
 figure
 hold on

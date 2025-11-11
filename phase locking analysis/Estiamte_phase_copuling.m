@@ -44,7 +44,7 @@ bin_size_freq = 0.01;
 
 %%
 tic
-for fn = 1:numel(animal_list)
+for fn = 11:numel(animal_list)
 
     if fn==1
         transt_psth  = GENERATE_PHASE_COUPLING_STRUCTURE([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq,bin_size_freq );
@@ -76,12 +76,14 @@ end
 
 %% save if needed
 % disp('saving')
-% save([saving_folder,'\delta_phase_couplig_structure_updated.mat'],'phase_struct', '-v7.3');
-% save([saving_folder,'\delta_phase_couplig_animal_names_updated.mat'],'animal_names');
+% save([saving_folder,'\delta_phase_couplig_structure_updated_with_non_playbouts.mat'],'phase_struct', '-v7.3');
+% save([saving_folder,'\delta_phase_couplig_animal_names_updated_with_non_playbouts.mat'],'animal_names');
 
 %% load
-load([saving_folder,'\delta_phase_couplig_structure_updated.mat'],'phase_struct');
-load([saving_folder,'\delta_phase_couplig_animal_names_updated.mat'],'animal_names');
+saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
+
+load([saving_folder,'\delta_phase_couplig_structure_updated_with_non_playbouts.mat'],'phase_struct');
+load([saving_folder,'\delta_phase_couplig_animal_names_updated_with_non_playbouts.mat'],'animal_names');
 % phase_struct(6 )=[];
 % animal_names(6,:)=[];
 %%
@@ -90,8 +92,7 @@ load([saving_folder,'\delta_phase_couplig_animal_names_updated.mat'],'animal_nam
 
 all_session_phase_stats = [];
 all_session_psth        = [];
-condition_1 = 'Partner1';
-condition_2 = 'Partner2';
+
 all_neurons = [];
 for ns = 1:numel(phase_struct)
 
@@ -117,6 +118,15 @@ for ns = 1:numel(phase_struct)
      this_session_cluster_info.PrePlay =sub_Table;
 
 
+      sub_Table =  array2table(squeeze(phase_struct(ns).non_play_phase_stats(1,:,:)));
+     sub_Table.Properties.VariableNames =phase_prop_names;
+     this_session_cluster_info.NonPlay =sub_Table;
+
+     sub_Table =  array2table(squeeze(phase_struct(ns).pre_non_play_phase_stats(1,:,:)));
+     sub_Table.Properties.VariableNames = phase_prop_names;
+     this_session_cluster_info.PreNonPlay =sub_Table;
+
+
      this_session_cluster_info.session = repmat(animal_names(ns,1),size(this_session_cluster_info,1),1);
 
 
@@ -130,15 +140,15 @@ end
 
 %%
 
-load([saving_folder,'\delta_all_neurons_v2.mat'],'all_neurons');
+% save([saving_folder,'\theta_all_neurons_v2.mat'],'all_neurons');
 %% ploting rate change
 all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
 % area_list = unique(all_neurons.area)';
-condition_1 = 'Partner2';
-condition_2 = 'Partner1';
+condition_1 = 'NonPlay';
+condition_2 = 'PreNonPlay';
 % area_list =  {'4N'	'DLPAG'	'DMPAG'	'DR'	'InfCol'	'LPAG'	'LSD'	'LSI'	'SupCol'	'VLPAG'	'isRt'	'mlf'};
-alpha = 0.05;
-area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' 'isRt'	};
+alpha = 0.01;
+area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR'};
 col = strcmp(phase_prop_names, 'MeanRate');
 figure
 concatenated_rate_differences = [];
@@ -161,7 +171,7 @@ for an=1:numel(area_list)
 
 
      d_prime = [d_prime;[2*mean(diff(matrix2plot))/sqrt(sum(std(matrix2plot,[],2))) an]];    
-    concatenated_rate_differences = [concatenated_rate_differences;[diff(matrix2plot)' ones(size(matrix2plot,2),1)*an]];
+    concatenated_rate_differences = [concatenated_rate_differences;[diff(matrix2plot)' ones(size(matrix2plot,2),1)*an all_neurons.EntireSession.PreferedAngle(index)]];
     hold on
         plot((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,'.k', 'MarkerSize',3)
 
@@ -201,7 +211,7 @@ xlim tight
 %% ploting entreinment change per area
 area_list = unique(all_neurons.area);
 alpha= 0.01;
-area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' 'isRt'	};
+area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR'};
 
 col = strcmp(phase_prop_names, 'PPCPval');
 entreinment_per_partner = nan(numel(area_list),6);
@@ -226,43 +236,50 @@ all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
 % area_list = unique(all_neurons.area)';
 
 % area_list =  {'4N'	'DLPAG'	'DMPAG'	'DR'	'InfCol'	'LPAG'	'LSD'	'LSI'	'SupCol'	'VLPAG'	'isRt'	'mlf'};
-
-area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' 'isRt'	};
+% area_list =  {	'DLPAG'	'DMPAG'	'DR'	'LPAG'		'SupCol'	'VLPAG'	'isRt'	'mlf'};
+% area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR', 'isRt'	};
 y_lim = [10^-6 5]
+area_list =  {	'DLPAG'	'DMPAG'	'DR'	'LPAG'		'SupCol'	'VLPAG'	};
 col = strcmp(phase_prop_names, 'PPC');
 figure
 concatenated_phase_differences = [];
 mean_phase_differences = [];
+% condition_1 = 'Partner1';
+% condition_2 = 'Partner2';
 
+condition_1 = 'NonPlay';
+condition_2 = 'PreNonPlay';
+% condition_1 = 'Play';
+% condition_2 = 'PrePlay';
 for an=1:numel(area_list)
     subplot(1,numel(area_list),an)
     index = strcmp(all_neurons.area, area_list{an}) & all_neurons.EntireSession.PPCPval<alpha &  ~isnan(all_neurons.(condition_1).PPC + all_neurons.(condition_2).PPC);
     x_jit = (rand(sum(index),2) -.5)*.25;
-    matrix2plot = squeeze(all_session_phase_stats(:,index,col));
+    matrix2plot = [all_neurons.(condition_1).PPC(index) all_neurons.(condition_2).PPC(index)  ];
 
-     data = [diff(matrix2plot)' ones(size(matrix2plot,2),1)*an ] ;
+    data = [diff(matrix2plot')' ones(size(matrix2plot,1),1)*an ] ;
     if size(data,1)>1
-    mean_phase_differences = [mean_phase_differences;mean(data, 'omitmissing')];    
+        mean_phase_differences = [mean_phase_differences;mean(data, 'omitmissing')];
     else
-          mean_phase_differences = [mean_phase_differences;data];
+        mean_phase_differences = [mean_phase_differences;data];
     end
-   
 
 
 
-    concatenated_phase_differences = [concatenated_phase_differences;[diff(matrix2plot)' ones(size(matrix2plot,2),1)*an all_neurons.EntireSession.PreferedAngle(index)]];
+
+    concatenated_phase_differences = [concatenated_phase_differences;[diff(matrix2plot')' ones(size(matrix2plot,1),1)*an all_neurons.EntireSession.PreferedAngle(index) matrix2plot]];
 
 
-    semilogy((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,':k')
+    semilogy((repmat([1 2],sum(index),1)+x_jit)',matrix2plot',':k')
     hold on
-    semilogy((repmat([1 2],sum(index),1)+x_jit)',matrix2plot,'.k', 'MarkerSize',3)
+    semilogy((repmat([1 2],sum(index),1)+x_jit)',matrix2plot','.k', 'MarkerSize',3)
 
-    semilogy([1 2]',mean(matrix2plot,2, 'omitmissing'),'_r', 'MarkerSize',4, 'LineWidth',3)
+    semilogy([1 2]',mean(matrix2plot,1, 'omitmissing'),'_r', 'MarkerSize',4, 'LineWidth',3)
     if all(any(isnan(matrix2plot),1))
         p = 1;
     else
-          [p,h,t] = signrank(matrix2plot(1,:)',matrix2plot(2,:)');
-          % [h,p] = ttest(matrix2plot(1,:)',matrix2plot(2,:)');
+        [p,h,t] = signrank(matrix2plot(1,:)',matrix2plot(2,:)');
+        % [h,p] = ttest(matrix2plot(1,:)',matrix2plot(2,:)');
     end
     ylim(y_lim)
     title([area_list{an},  ' ', num2str(p)])
@@ -309,35 +326,267 @@ xticklabels(area_list)
 xlim tight
 ylim([-100 100])
 
-%%
-area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' 'isRt'	};
+%% rate and entraeinmetn change by cell type(peak and trough)
+
+
+
+%% same but in paired comparisson (BAR PLOTS)
+area_list = {'SupCol'  'DLPAG'	'LPAG' 'VLPAG'	'DR' };
 alpha=0.05;
 figure
-names = categorical({'Trough','Peak'});
+y_lim_ppc = [-0.1 0.4];
+y_lim_Rate = [-100 100];
+line_width = .25;
+names = {'Trough','Peak'};
+bar_per_area = [];
 for an=1:numel(area_list)
-    subplot(1,numel(area_list),an)
+    subplot(1,numel(area_list)+1,an)
     index           = concatenated_phase_differences(:,2)==an;
-    angle_index     = concatenated_phase_differences(:,3)<-p/2 | concatenated_phase_differences(:,3)>pi/2;
+    angle_index     = concatenated_phase_differences(:,3)<-pi/2 | concatenated_phase_differences(:,3)>pi/2;
 
 
     p =ranksum(concatenated_phase_differences(angle_index & index,1),concatenated_phase_differences(~angle_index & index,1));
     p1 = signrank(concatenated_phase_differences(angle_index & index,1));
+    % [h,p1]= ttest(concatenated_phase_differences(angle_index & index,end-1),concatenated_phase_differences(angle_index & index,end))
 
-    swarmchart(names(angle_index(index)+1) , concatenated_phase_differences(index,1),'.')
+   
+
+
+    rand_x = (rand(sum(angle_index & index),2)-.5)/2;
+    plot((rand_x + ones(size(rand_x))*diag([1 2]))',concatenated_phase_differences(angle_index & index, end-1:end)', 'k:')
     hold on
+    plot((rand_x + ones(size(rand_x))*diag([1 2]))',concatenated_phase_differences(angle_index & index, end-1:end)', 'k.')
+    this_medians = median(concatenated_phase_differences(angle_index & index, end-1:end))
     if p1<alpha
-        text(1,.19, num2str(round(p1,4)))
+        text(1.5,.9*y_lim_ppc(2), num2str(round(p1,4)))
+        plot([1 2], y_lim_ppc([2 2])*.85, 'r')
     end
+    bar(1,this_medians(1) , 'r', 'FaceAlpha',.7, 'EdgeColor','none')
+    bar(2,this_medians(2) , 'b', 'FaceAlpha',.7, 'EdgeColor','none')
 
-    p2 = signrank(concatenated_phase_differences(~angle_index & index,1));
+    yscale log
+    axis tight
+
+
+    rand_x = (rand(sum(~angle_index & index),2)-.5)/2;
+    plot((rand_x + ones(size(rand_x))*diag([3 4]))',concatenated_phase_differences(~angle_index & index, end-1:end)', 'k:')
+    hold on
+    plot((rand_x + ones(size(rand_x))*diag([3 4]))',concatenated_phase_differences(~angle_index & index, end-1:end)', 'k.')
+
+
+    p2 = signrank(concatenated_phase_differences(~angle_index & index, end-1),concatenated_phase_differences(~angle_index & index, end));
+    % [h,p2]= ttest(concatenated_phase_differences(~angle_index & index, end-1)+.2,concatenated_phase_differences(~angle_index & index, end)+.2);
+  
+     this_medians = median(concatenated_phase_differences(~angle_index & index, end-1:end));
     if p2<alpha
-        text(2,.19, num2str(round(p2,4)))
+        text(3.5,.9*y_lim_ppc(2), num2str(round(p2,4)))
+        plot([3 4], y_lim_ppc([2 2])*.85, 'r')
     end
-    title([area_list{an}, '  pVal ', num2str(p)])
-    ylim([-.2 .2])
+       bar(3,this_medians(1) , 'r', 'FaceAlpha',.7, 'EdgeColor','none')
+        bar(4,this_medians(2) , 'b', 'FaceAlpha',.7, 'EdgeColor','none')
+        yscale log
+   axis tight
+    
+    
+
+ylim(y_lim_ppc)
+xticks(1:4)
+xticklabels({[names{1}, ' ', condition_1],[names{1}, ' ', condition_2],[names{2} , ' ', condition_1],[names{2}, ' ', condition_2]})
+   
+  
+    
+ 
 
 end
 
+
+ subplot(1,numel(area_list)+1,numel(area_list)+1)
+    index           = true(size(concatenated_phase_differences(:,2)));
+    angle_index     = concatenated_phase_differences(:,3)<-pi/2 | concatenated_phase_differences(:,3)>pi/2;
+
+
+    p =ranksum(concatenated_phase_differences(angle_index & index,1),concatenated_phase_differences(~angle_index & index,1));
+    p1 = signrank(concatenated_phase_differences(angle_index & index,1));
+    % [h,p1]= ttest(concatenated_phase_differences(angle_index & index,end-1),concatenated_phase_differences(angle_index & index,end))
+
+   
+    y2plot = atanh(concatenated_phase_differences(angle_index & index, end-1:end)');
+
+
+    rand_x = (rand(sum(angle_index & index),2)-.5)/2;
+    plot((rand_x + ones(size(rand_x))*diag([1 2]))',y2plot, 'k:')
+    hold on
+    plot((rand_x + ones(size(rand_x))*diag([1 2]))',y2plot, 'k.')
+    this_medians = median(y2plot)
+    if p1<alpha
+        text(1.5,.9*y_lim_ppc(2), num2str(round(p1,8)))
+        plot([1 2], y_lim_ppc([2 2])*.85, 'r')
+    end
+    bar(1,this_medians(1) , 'r', 'FaceAlpha',.7, 'EdgeColor','none')
+    bar(2,this_medians(2) , 'b', 'FaceAlpha',.7, 'EdgeColor','none')
+
+    yscale log
+    axis tight
+
+
+    rand_x = (rand(sum(~angle_index & index),2)-.5)/2;
+    y2plot =atanh(concatenated_phase_differences(~angle_index & index, end-1:end)');
+    plot((rand_x + ones(size(rand_x))*diag([3 4]))',y2plot, 'k:')
+    hold on
+    plot((rand_x + ones(size(rand_x))*diag([3 4]))',y2plot, 'k.')
+
+
+    p2 = signrank(concatenated_phase_differences(~angle_index & index, end-1),concatenated_phase_differences(~angle_index & index, end));
+    % [h,p2]= ttest(concatenated_phase_differences(~angle_index & index, end-1)+.2,concatenated_phase_differences(~angle_index & index, end)+.2);
+  
+     this_medians = median(y2plot);
+    if p2<alpha
+        text(3.5,.9*y_lim_ppc(2), num2str(round(p2,8)))
+        plot([3 4], y_lim_ppc([2 2])*.85, 'r')
+    end
+       bar(3,this_medians(1) , 'r', 'FaceAlpha',.7, 'EdgeColor','none')
+        bar(4,this_medians(2) , 'b', 'FaceAlpha',.7, 'EdgeColor','none')
+        % yscale log
+   axis tight
+    
+    
+
+ylim(y_lim_ppc)
+xticks(1:4)
+xticklabels({[names{1}, ' ', condition_1],[names{1}, ' ', condition_2],[names{2} , ' ', condition_1],[names{2}, ' ', condition_2]})
+   
+  %%
+  %% same but in paired comparisson (SQUARE PLOTS)
+
+alpha=0.05;
+figure
+y_lim_ppc = [-0.005 0.07];
+y_lim_Rate = [-100 100];
+line_width = .25;
+names = {'Trough','Peak'};
+bar_per_area = [];
+for an=1:numel(area_list)
+    subplot(2,numel(area_list)+1,an)
+    index           = concatenated_phase_differences(:,2)==an;
+    angle_index     = concatenated_phase_differences(:,3)<-pi/2 | concatenated_phase_differences(:,3)>pi/2;
+
+
+    p =ranksum(concatenated_phase_differences(angle_index & index,1),concatenated_phase_differences(~angle_index & index,1));
+    p1 = signrank(concatenated_phase_differences(angle_index & index,1));
+    % [h,p1]= ttest(concatenated_phase_differences(angle_index & index,end-1),concatenated_phase_differences(angle_index & index,end))
+
+   
+
+
+    y2plot = atanh(concatenated_phase_differences(angle_index & index, end-1:end));
+    plot(y2plot(:,1),y2plot(:,2), 'k.')
+    hold on
+    this_medians = median(y2plot);
+     plot(y_lim_ppc, y_lim_ppc, 'r')
+
+    axis([y_lim_ppc y_lim_ppc])
+    plot(this_medians(1), this_medians(2), 'xr')
+
+        title([area_list{an},' ' num2str(round(p1,4))])
+   
+
+axis square
+
+
+
+
+      subplot(2,numel(area_list)+1,numel(area_list)+1 +an)
+  
+     y2plot = atanh(concatenated_phase_differences(~angle_index & index, end-1:end));
+    plot(y2plot(:,1),y2plot(:,2), 'k.')
+    hold on
+    this_medians = median(y2plot);
+    plot(this_medians(1), this_medians(2), 'xr')
+   plot(y_lim_ppc, y_lim_ppc, 'r')
+
+    axis([y_lim_ppc y_lim_ppc])
+
+    p2 = signrank(concatenated_phase_differences(~angle_index & index, end-1),concatenated_phase_differences(~angle_index & index, end));
+    % [h,p2]= ttest(concatenated_phase_differences(~angle_index & index, end-1)+.2,concatenated_phase_differences(~angle_index & index, end)+.2);
+  
+     this_medians = median(concatenated_phase_differences(~angle_index & index, end-1:end));
+    if p2<alpha
+       title(num2str(round(p2,4)))
+       
+    end
+      
+axis square
+    
+    
+
+% ylim(y_lim_ppc)
+% xticks(1:4)
+% xticklabels({[names{1}, ' ', condition_1],[names{1}, ' ', condition_2],[names{2} , ' ', condition_1],[names{2}, ' ', condition_2]})
+% 
+  
+    
+ 
+
+end
+
+
+ subplot(2,numel(area_list)+1,numel(area_list)+1)
+    index           = true(size(concatenated_phase_differences(:,2)));
+    angle_index     = concatenated_phase_differences(:,3)<-pi/2 | concatenated_phase_differences(:,3)>pi/2;
+
+
+ 
+    p1 = signrank(concatenated_phase_differences(angle_index & index, end),concatenated_phase_differences(angle_index & index, end-1));
+    % [h,p1]= ttest(concatenated_phase_differences(angle_index & index,end-1),concatenated_phase_differences(angle_index & index,end))
+
+   
+
+    y2plot = atanh(concatenated_phase_differences(angle_index & index, end-1:end));
+    plot(y2plot(:,1),y2plot(:,2), 'k.')
+    hold on
+    this_medians = median(y2plot);
+   plot(y_lim_ppc, y_lim_ppc, 'r')
+
+    axis([y_lim_ppc y_lim_ppc])
+    plot(this_medians(1), this_medians(2), 'xr')
+    if p1<alpha
+        title(num2str(round(p1,6)))
+    end
+axis square
+ subplot(2,numel(area_list)+1,2*(numel(area_list)+1))
+    index           = true(size(concatenated_phase_differences(:,2)));
+    angle_index     = concatenated_phase_differences(:,3)<-pi/2 | concatenated_phase_differences(:,3)>pi/2;
+
+
+
+    p1 = signrank(concatenated_phase_differences(~angle_index & index, end),concatenated_phase_differences(~angle_index & index, end-1));
+    % [h,p1]= ttest(concatenated_phase_differences(angle_index & index,end-1),concatenated_phase_differences(angle_index & index,end))
+
+   
+
+    y2plot = atanh(concatenated_phase_differences(~angle_index & index, end-1:end));
+    plot(y2plot(:,1),y2plot(:,2), 'k.')
+    hold on
+    this_medians = median(y2plot);
+   plot(y_lim_ppc, y_lim_ppc, 'r')
+
+    axis([y_lim_ppc y_lim_ppc])
+    plot(this_medians(1), this_medians(2), 'xr')
+    if p1<alpha
+        title(num2str(round(p1,6)))
+    end
+
+axis square
+%%
+
+
+y = [concatenated_phase_differences(angle_index , end-1);concatenated_phase_differences(angle_index , end)];
+factor1 = [concatenated_phase_differences(angle_index , 2);concatenated_phase_differences(angle_index , 2)];
+factor2 = [concatenated_phase_differences(angle_index , end-1)*0;concatenated_phase_differences(angle_index , end)*0+1];
+
+no_nan = y>0;
+[p, tbl, stats] = anovan(log(y(no_nan)), {factor1(no_nan), factor2(no_nan)}, 'model', 'interaction', ...
+    'varnames', {'Factor1', 'Factor2'});
 %%
 
 area_list = {'SupCol'};

@@ -12,6 +12,7 @@ animal_code         = animal_code{end};
 animal_code_params  = strsplit(animal_code, ' ');
 animal_batch        = animal_code_params{1};
 date                = animal_code_params{2};
+area2analyse        = 'PAG';
 repeated_animal     = animal_code_params{3};
 %% define parameters
 
@@ -61,6 +62,35 @@ config.behavior_window  = 0;
 [play_bouts_table]      = play_bout(config);
 
 
+%% determining NPX type
+hard_coded_x_coords_NPX2 = [8 40;258 290; 508 540; 758 790];
+load([current_dir,'\','chann_map_', area2analyse, '.mat'], 'chanMap', 'xcoords', 'ycoords')
+if any(ismember(xcoords, hard_coded_x_coords_NPX2))
+     NPX_Type        = 2;
+else
+     NPX_Type        = 1;
+     if ~ismember(192, chanMap)
+
+         pos_191 = find(chanMap==191);
+         pos_193 = find(chanMap==193);
+
+         if pos_193 == pos_191+1
+
+             xcoords = [xcoords;NaN];
+             xcoords(pos_193+1:end) = xcoords(pos_193:end-1);
+             xcoords(pos_193) = 43;
+             ycoords = [ycoords;NaN];
+             ycoords(pos_193+1:end) = ycoords(pos_193:end-1);
+             ycoords(pos_193) = 1900;
+             chanMap = [chanMap;NaN];
+             chanMap(pos_193+1:end) = chanMap(pos_193:end-1);
+             chanMap(pos_193) = 192;
+         else
+             disp('Inconsistent ChannelMap')
+             return
+         end
+     end
+end
 
 
 %%  load lfp from current dir
@@ -78,11 +108,12 @@ end
 
 LFP = double(LFP);
 disp('LFP LOADED')
-%% Create channel map
+
+%% Create (load) channel map
 disp('Loading Channel Map')
 areas_by_channel = cell(384,1);
 channel_map      = nan(384,2);
-hard_coded_x_coords = [8 40;258 290; 508 540; 758 790];
+
 area_limit = readtable(area_limit_table);
 
 % Build animal identifier for area selection
@@ -94,35 +125,28 @@ end
 area_limit = area_limit(ismember(area_limit.AnimalName,this_animal),:);
 
 if NPX_Type == 1
-    load([chan_map_folder,'\neuropixPhase3A_kilosortChanMap.mat'], 'xcoords','ycoords', 'chanMap' )
+
     
- 
-
-
-
   for ch_n=1:384
-      ch = chanMap(ch_n)+1;
+      ch = chanMap(ch_n);
       channel_map(ch,1) = xcoords(ch_n);
       channel_map(ch,2) = ycoords(ch_n);
-      areas_by_channel{ch} = area_limit.area{ycoords(ch_n)>=area_limit.depth_start &  ycoords(ch_n)<area_limit.depth_end+1 & ismember(area_limit.Probe_Area, 'PAG') };
+      areas_by_channel{ch} = area_limit.area{ycoords(ch_n)>=area_limit.depth_start &  ycoords(ch_n)<area_limit.depth_end+1 & ismember(area_limit.Probe_Area, area2analyse) };
   end
-
 else
-    load([current_dir,'\ChannelMap.mat'], 'xcoords', 'ycoords','chanMap')
 
   
     
    for ch_n=1:384
-       probe_n = find(any(ismember(hard_coded_x_coords,xcoords(ch_n)),2));
-      ch = chanMap(ch_n)+1;
+      probe_n = find(any(ismember(hard_coded_x_coords_NPX2,xcoords(ch_n)),2));
+      ch = chanMap(ch_n);
       channel_map(ch,1) = xcoords(ch_n);
       channel_map(ch,2) = ycoords(ch_n);
-      areas_by_channel{ch} = area_limit.area{ycoords(ch_n)>=area_limit.depth_start &  ycoords(ch_n)<area_limit.depth_end+1 & area_limit.ProbeNum==probe_n & ismember(area_limit.Probe_Area, 'PAG')};
+      areas_by_channel{ch} = area_limit.area{ycoords(ch_n)>=area_limit.depth_start &  ycoords(ch_n)<area_limit.depth_end+1 & area_limit.ProbeNum==probe_n & ismember(area_limit.Probe_Area, area2analyse)};
   end
 
-      
+end   
 
-end
 %% obtain_psth
 hist_range      = [-20 20];
 range_time_wrap = [-5 5];

@@ -4,7 +4,7 @@ saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OP
 animal_list = dir(npx_Raw_Data);
 animal_list(1:2) = [];
 
-animal_list = animal_list(2:3);
+animal_list = animal_list(11:12);
 animal_file_names =  cellfun(@(x) ['B', x],strsplit([animal_list.name], 'B'), 'UniformOutput',false)';
 animal_file_names(1) = [];
 % animal2exclude = {'B4D4 0826 Dual'};
@@ -41,12 +41,12 @@ Hd_freq2 = designfilt('bandpassfir', ...
 for fn = 1:numel(animal_list)
     
     if fn==1
-        pli_struct = GENERATE_COHERNECE_MAPS_STRUCT([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq1,Hd_freq2, 'mPFC');
+        pli_struct = GENERATE_COHERNECE_MAPS_STRUCT([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq1,Hd_freq2, 'PAG');
          
         n_strctut = n_strctut+numel(pli_struct);
         animal_names = [animal_names;[repmat(animal_list(fn).name,numel(pli_struct),1) num2cell(1:numel(pli_struct))']]
     else
-        transt_psth =  GENERATE_COHERNECE_MAPS_STRUCT([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq1,Hd_freq2, 'mPFC');
+        transt_psth =  GENERATE_COHERNECE_MAPS_STRUCT([npx_Raw_Data, '\', animal_list(fn).name],Hd_freq1,Hd_freq2, 'PAG');
       
         for sub_j=1:numel(transt_psth)
     
@@ -62,9 +62,9 @@ end
 pli_struct_mpfc = pli_struct;
 clear pli_struct
 %%
-disp('saving')
-save([saving_folder,'\coherence_structure_pli_struct_mpfc.mat'],'pli_struct_mpfc', '-v7.3');
-save([saving_folder,'\coherence_structure_animal_names_pli_struct_mpfc.mat'],'animal_names');
+% disp('saving')
+% save([saving_folder,'\coherence_structure_pli_struct_NPX2.mat'],'pli_struct_NPX2', '-v7.3');
+% save([saving_folder,'\coherence_structure_animal_names_pli_struct_NPX2.mat'],'animal_names');
 
 
 %% loading 
@@ -75,6 +75,8 @@ load([saving_folder,'\coherence_structure_pli_struct_mpfc.mat'],'pli_struct_mpfc
 load([saving_folder,'\coherence_structure_pli_struct_B1D11007.mat'],'pli_struct_B1D11007');
 load([saving_folder,'\coherence_structure.mat'],'pli_struct');
 load([saving_folder,'\coherence_structure_animal_names.mat'],'animal_names');
+load([saving_folder,'\coherence_structure_pli_struct_NPX2.mat'],'pli_struct_NPX2', '-v7.3');
+
 
 %%
 animal_names(7:numel(pli_struct)+3,1)  = animal_names(4:numel(pli_struct),1);
@@ -84,6 +86,7 @@ pli_struct(4) = pli_struct(1);
 pli_struct(5:6) = pli_struct(2:3);
 pli_struct(2:3) =pli_struct_mpfc;
 pli_struct(1) = pli_struct_B1D11007;
+pli_struct(14) = pli_struct_NPX2(1);
 
 animal_names{1,1} = 'B1D1 1007 Dual ORIGINALLY mPFC'
 animal_names{2,1} = 'B1D1 1012 Dual ORIGINALLY mPFC'

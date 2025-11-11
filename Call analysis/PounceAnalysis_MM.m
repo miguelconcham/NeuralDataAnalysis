@@ -1,0 +1,502 @@
+%% set parameters
+np_data_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\NPX data\NPX raw data';
+saving_directory = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\NPX data\Analysis results\Pounce analysis';
+npx_folders = dir(np_data_folder);
+npx_folders(1:2)    = [];
+
+npx_folders = npx_folders([3,4,5,8,9,10,12])
+area2analyze        = 'PAG'; % either PAG, mPFC or other
+behaviors2analyse   = {'Pounce_A','Pounce_Ai'};
+% behaviors2analyse = {'CC','CB','CD','Pounce_A','Pounce_B','Evasion', 'Escape', 'Pin', 'Box'};
+% current_dir = cd;
+range_borders       = [-2 2];
+bin_size            = 0.01;
+pre_rate            = [-.5 0];
+min_length          = 0;
+ploting_range   = [-1 2];
+
+ploting_bool = false;
+%%
+all_stacked_correlations = [];
+all_lengths = [];
+merged_calls = [];
+merged_behavior_type = [];
+min_length = 0.05;
+%%
+for fn = 1:numel(npx_folders)
+    disp(npx_folders(fn).name)
+
+current_dir = [np_data_folder, '\', npx_folders(fn).name];
+
+animal_code         = strsplit(current_dir, '\');
+animal_code         = animal_code{end};
+animal_code_params  = strsplit(animal_code, ' ');
+animal_batch        = animal_code_params{1};
+date                = animal_code_params{2};
+repeated_animal     = animal_code_params{3};
+
+[psth_tensor_onset, psth_tensor_offset,psth_edges_onset,psth_edges_offset, mean_rate_during_behavior, behavior_indexes, ~, beh_length, Behavior,ego_alter_dummy, self_animal,cluster_info] =get_psth(current_dir,behaviors2analyse,area2analyze,range_borders,bin_size);
+[psth_tensor_onset_call, psth_tensor_offset_call,psth_edges_onset_call,psth_edges_offset_call, mean_rate_during_call, all_call_index, cluster_area, call_length, CallStats, call_type,calls_within,psth_calls_onset,behavior_type, beh_data, edges_behavior_psth] = get_psth_calls(current_dir,behaviors2analyse,area2analyze,range_borders,bin_size);
+%beh_data, edges_behavior_psth son una tablea con el comportamiento de cada
+%fila, el largo del comportamiento y elindice origianl de la tabla Behavior
+merged_calls = [merged_calls;psth_calls_onset];
+merged_behavior_type = [merged_behavior_type;beh_data];
+
+cluster_index = 1:numel(cluster_area);
+onset_time = .5*(psth_edges_onset(1:end-1)+psth_edges_onset(2:end));
+Behavior_onset_offset = [Behavior.Start(behavior_indexes) Behavior.End(behavior_indexes)];
+
+
+
+pre_rate_index = onset_time>=pre_rate(1) & onset_time<=pre_rate(2);
+all_lengths = [all_lengths;[beh_length beh_length*0+fn]];
+[sorted_length, behavior_order] = sort(beh_length);
+
+self_index_ordered = ego_alter_dummy(behavior_order);
+this_behaviort_aligned_calls = nan(size(Behavior_onset_offset,1),numel(psth_edges_onset)-1);
+
+
+if exist('CallStats', 'var')    
+    for bn = 1:size(Behavior_onset_offset,1)
+        this_behavior_onset  = Behavior_onset_offset(bn,1);
+        this_behavior_offset = Behavior_onset_offset(bn,2);
+
+        this_behaviort_aligned_calls(bn,:) = any((psth_edges_onset(1:end-1)+this_behavior_onset>=CallStats.BeginTimes & psth_edges_onset(1:end-1)+this_behavior_onset<=CallStats.EndTimes) | ...
+            (psth_edges_onset(2:end)+this_behavior_onset>=CallStats.BeginTimes & psth_edges_onset(2:end)+this_behavior_onset<=CallStats.EndTimes),1);
+        this_behaviort_aligned_calls(bn,psth_edges_onset(1:end-1)>range_borders(2)+this_behavior_offset-this_behavior_onset)  = 0;
+    end
+end
+
+stacked_correlations =cell(numel(cluster_index),10);
+this_behaviort_aligned_calls_sorted = this_behaviort_aligned_calls(behavior_order,:);
+% for cn = 1:numel(cluster_index)
+for cn = 1:numel(cluster_index)
+    if ploting_bool
+    figure('units','normalized','outerposition',[0 0 .75 1]);
+    end
+    this_neuron = cluster_index(cn);
+    this_neuron_area = cluster_area{this_neuron};
+
+    
+
+    % colormap(1-gray)
+    matrix2plot = squeeze(psth_tensor_onset(this_neuron,behavior_order,:));
+    matrix2plot = matrix2plot(self_index_ordered & sorted_length>min_length,:); % only self
+    this_lengths = sorted_length(self_index_ordered & sorted_length>min_length); % only self
+    matrix2images = matrix2plot;
+    matrix2images(isnan(matrix2images))=0;   
+
+    if ploting_bool
+        subplot(2,3,1)
+        imagesc(onset_time,1:numel(this_lengths),1-repmat(matrix2images,1,1,3));
+        axis xy
+        hold on
+        plot((1:numel(this_lengths))*0, 1:numel(this_lengths), 'r')
+        plot(this_lengths, 1:numel(this_lengths), 'r')
+        plot((1:numel(this_lengths))*0 +pre_rate(1), 1:numel(this_lengths), ':r')
+
+        xlim(ploting_range)
+        yticks([])
+        xticklabels([])
+        ylabel('Self')
+        title(['Behavior ', this_neuron_area, ' ID' num2str(this_neuron)])
+    end
+         
+    rate_beofre_this_neuron = mean(matrix2plot(:,pre_rate_index ),2);
+    call_before = mean(this_behaviort_aligned_calls_sorted(self_index_ordered & sorted_length>min_length,pre_rate_index),2);  
+   
+    mdl1 = fitglm(call_before, this_lengths, 'Distribution', 'gamma', 'Link', 'log');
+    rate_model = fitglm(rate_beofre_this_neuron, this_lengths, 'Distribution', 'gamma', 'Link', 'log');    
+    glm_pvalue_1 = rate_model.coefTest;
+
+    mdl2 = fitglm([call_before rate_beofre_this_neuron], this_lengths, 'Distribution', 'gamma', 'Link', 'log');
+    D1 = mdl1.Deviance;  % simpler model
+    D2 = mdl2.Deviance;  % full model
+
+    % Get degrees of freedom difference
+    df = mdl2.NumEstimatedCoefficients - mdl1.NumEstimatedCoefficients;
+
+    % Compute test statistic
+    chi2stat = D2 - D1;
+
+    % Compute p-value using chi-squared distribution
+    p_deviance1 = 1 - chi2cdf(chi2stat, df);
+
+    % Estiamte correaltion beteen rate and length
+    [c1,p1] = corr(rate_beofre_this_neuron,this_lengths, 'Type','Spearman');
+     [c1_call,p1_call] = corr(call_before,this_lengths, 'Type','Spearman');
+    if ploting_bool
+        subplot(2,3,2)
+        swarmchart(call_before,this_lengths,'k.')
+        title([c1 ,p1])
+
+        subplot(2,3,3)
+
+        swarmchart(call_before,this_lengths,'k.')
+
+       
+        title([c1_call ,p1_call])
+    end
+
+
+    % colormap(1-gray)
+    matrix2plot = squeeze(psth_tensor_onset(this_neuron,behavior_order,:));
+    matrix2plot = matrix2plot(~self_index_ordered & sorted_length>min_length,:);
+    this_lengths = sorted_length(~self_index_ordered & sorted_length>min_length);
+    matrix2images = matrix2plot;
+    matrix2images(isnan(matrix2images))=0;   
+
+    if ploting_bool
+        subplot(2,3,4)
+        imagesc(onset_time,1:numel(this_lengths),1-repmat(matrix2images,1,1,3));
+        axis xy
+        hold on
+        plot((1:numel(this_lengths))*0, 1:numel(this_lengths), 'r')
+        plot(this_lengths, 1:numel(this_lengths), 'r')
+        plot((1:numel(this_lengths))*0 +pre_rate(1), 1:numel(this_lengths), ':r')
+        xlim(ploting_range)
+        yticks([])
+        ylabel('Other')
+    end
+
+  
+    rate_beofre_this_neuron = mean(matrix2plot(:,pre_rate_index ),2);
+    call_before = mean(this_behaviort_aligned_calls_sorted(~self_index_ordered & sorted_length>min_length,pre_rate_index),2);  
+
+    mdl1 = fitglm(call_before, this_lengths, 'Distribution', 'gamma', 'Link', 'log');
+    rate_model = fitglm(rate_beofre_this_neuron, this_lengths, 'Distribution', 'gamma', 'Link', 'log');    
+    glm_pvalue_2 = rate_model.coefTest;
+    mdl2 = fitglm([call_before rate_beofre_this_neuron], this_lengths, 'Distribution', 'gamma', 'Link', 'log');
+    D1 = mdl1.Deviance;  % simpler model
+    D2 = mdl2.Deviance;  % full model
+
+    % Get degrees of freedom difference
+    df = mdl2.NumEstimatedCoefficients - mdl1.NumEstimatedCoefficients;
+
+    % Compute test statistic
+    chi2stat = D2 - D1;
+    % Compute p-value using chi-squared distribution
+    p_deviance2 = 1 - chi2cdf(chi2stat, df);
+
+    % Estiamte correaltion beteen rate and length
+    [c2,p2] = corr(rate_beofre_this_neuron,this_lengths, 'Type','Spearman');
+     [c2_call,p2_call] = corr(call_before,this_lengths, 'Type','Spearman');
+   
+    if ploting_bool
+        subplot(2,3,5)
+        swarmchart(rate_beofre_this_neuron,this_lengths,'k.')
+        title([c2 ,p2])
+
+        subplot(2,3,6)
+        swarmchart(call_before,this_lengths,'k.')
+        title([c2_call ,p2_call])
+        % saving_directory animal_code
+        saveas(gcf,[saving_directory,  '\',this_neuron_area , ' ', animal_code,  ' length correlation ', this_neuron_area, ' ID' num2str(this_neuron), '.jpg'])
+        pause(.1)
+        close gcf
+    end
+    stacked_correlations(cn,1:10) = {c1 c2 p1 p2 p_deviance1 p_deviance2 glm_pvalue_1 glm_pvalue_2 p1_call p2_call };
+    stacked_correlations(cn,11) = {this_neuron_area};
+    stacked_correlations(cn,12) = {animal_code};
+end
+
+all_stacked_correlations = [all_stacked_correlations;stacked_correlations];
+pause(.1)
+end
+
+%% warp data
+bin_centers = .5*(edges_behavior_psth(2:end) + edges_behavior_psth(1:end-1));
+bin_size = mean(diff(bin_centers));
+min_length = .05;
+index_selection =  merged_behavior_type.BehaviorLenght>min_length;
+%funcion que warped un psth
+
+figure
+imagesc(bin_centers, 1:size(merged_calls,1),merged_calls(index_selection,:))
+[psth_warped, t_warped] = warp_psth(merged_calls(index_selection,:), bin_centers, merged_behavior_type.BehaviorLenght(index_selection), 20, [-5 5]);
+y_lim = [0 30];
+new_lengths =  merged_behavior_type.BehaviorLenght(index_selection);
+behavior_type = merged_behavior_type.BehaviorType;
+
+[new_sorted_lenghts, order] = sort(new_lengths);
+behavior_type =behavior_type(order);
+
+%%
+figure
+colormap(1-gray)
+time2use = edges_behavior_psth;
+psth2use = merged_calls(index_selection,:);
+subplot(5,3,[1 4 7])
+hold on
+matrix2plot = ceil(psth2use(order,:))/bin_size;
+for j=1:size(matrix2plot,1)
+matrix2plot(j,:) = smooth(matrix2plot(j,:),10);
+end
+imagesc(time2use,1:size(psth2use,1),matrix2plot)
+plot([0 0], [1 size(psth2use,1)], 'r')
+% plot([5 5], [1 size(psth2use,1)], 'r')
+axis xy
+axis tight
+
+
+subplot(5,3,[1 4 7]+1)
+hold on
+index = ismember(behavior_type, 'Pounce_A');
+matrix2plot = ceil(psth2use(order(index),:));
+for j=1:size(matrix2plot,1)
+matrix2plot(j,:) = smooth(matrix2plot(j,:),10);
+end
+imagesc(time2use,1:sum(index),matrix2plot)
+plot([0 0], [1 sum(index)], 'r')
+% plot([5 5], [1 sum(index)], 'r')
+axis xy
+axis tight
+
+subplot(5,3,[1 4 7]+2)
+hold on
+index = ismember(behavior_type, 'Pounce_Ai');
+matrix2plot = ceil(psth2use(order(index),:));
+for j=1:size(matrix2plot,1)
+matrix2plot(j,:) = smooth(matrix2plot(j,:),10);
+end
+
+imagesc(time2use,1:sum(index),matrix2plot)
+plot([0 0], [1 sum(index)], 'r')
+plot([5 5], [1 sum(index)], 'r')
+axis xy
+axis tight
+
+
+subplot(5,3,[10 13])
+matrix2plot = ceil(psth2use(order,:));
+for j=1:size(matrix2plot,1)
+matrix2plot(j,:) = smooth(matrix2plot(j,:),10);
+end
+plot(time2use, mean(matrix2plot)/bin_size, 'k')
+hold on
+axis tight
+
+plot([0 0], y_lim, 'r')
+plot([5 5], y_lim, 'r')
+
+%% 
+figure
+% subplot(5,3,[10 13]+1)
+index = ismember(behavior_type, 'Pounce_Ai');
+matrix2plot = ceil(psth2use(order(index),:));
+matrix_Pounce_i = ceil(psth2use(order(index),:));
+for j=1:size(matrix2plot,1)
+matrix2plot(j,:) = smooth(matrix2plot(j,:),10);
+end
+plot(time2use, mean(matrix2plot)/bin_size)
+hold on
+% plot(time2use, (mean(matrix2plot)+std(matrix2plot))/bin_size,'--')
+% plot(time2use, mean(matrix2plot)-std(matrix2plot)/bin_size,'--')
+% axis tight
+% ylim(y_lim)
+% plot([0 0], y_lim, 'r')
+% plot([5 5], y_lim, 'r')
+
+% subplot(5,3,[10 13]+2)
+index = ismember(behavior_type, 'Pounce_A');
+matrix2plot = ceil(psth2use(order(index),:));
+for j=1:size(matrix2plot,1)
+matrix2plot(j,:) = smooth(matrix2plot(j,:),10);
+end
+plot(time2use, mean(matrix2plot)/bin_size)
+hold on
+% plot(time2use, (mean(matrix2plot)+std(matrix2plot))/bin_size,'--')
+% plot(time2use, mean(matrix2plot)-std(matrix2plot)/bin_size,'--')
+% axis tight
+ylim(y_lim)
+plot([0 0], y_lim, 'r')
+% plot([5 5], y_lim, 'r')
+
+xlim([-0.5 1])
+axis square
+
+
+% Pepe - values in time %
+
+p=[];d=[];
+% for t_i = 1:100:size(matrix2plot,2)-100
+%     [p(t_i),d(t_i)] = ranksum(mean(matrix_Pounce(:,t_i:t_i+100),2),mean(matrix2plot(:,t_i:t_i+100),2));
+% end
+
+t_i_ct=1;
+for t_i = 1900:2100
+    % [p(t_i_ct),d(t_i_ct)] = ranksum(mean(matrix_Pounce_i(:,t_i),2),mean(matrix2plot(:,t_i),2),'tail','left');
+    [p(t_i),d(t_i)] = ranksum(mean(matrix_Pounce_i(:,t_i),2),mean(matrix2plot(:,t_i),2),'alpha',0.0001);
+
+    t_i_ct = t_i_ct + 1;
+end
+
+
+
+sel_A=find(diff([0,d,0])==1);
+sel_B=find(diff([0,d,0])==-1);
+A = time2use(sel_A);
+B = time2use(sel_B);
+for i = 1: numel(A)
+    fill([A(i) B(i) B(i) A(i)],[25 25 28 28],[0.9290 0.6940 0.1250])
+end
+%%
+figure
+subplot(3,1,1:2)
+index = ismember(behavior_type, 'Pounce_Ai');
+matrix2plot = ceil(psth2use(order(index),:))/bin_size;
+for j=1:size(matrix2plot,1)
+matrix2plot(j,:) = smooth(matrix2plot(j,:),5);
+end
+
+pctg_calling_Ai = median(matrix2plot(:,behavor_range),2);
+[~, ~, ci] = ttest(matrix2plot);
+
+
+fill([time2use fliplr(time2use)],[ci(1,:) fliplr(ci(2,:))], 'k', 'FaceAlpha',.2, 'EdgeColor','none')
+hold on
+plot(time2use, mean(matrix2plot), 'k')
+
+
+
+index = ismember(behavior_type, 'Pounce_A');
+matrix2plot = ceil(psth2use(order(index),:))/bin_size;
+for j=1:size(matrix2plot,1)
+matrix2plot(j,:) = smooth(matrix2plot(j,:),5);
+end
+[~, ~, ci] = ttest(matrix2plot);
+pctg_calling_A = median(matrix2plot(:,behavor_range),2);
+
+fill([time2use fliplr(time2use)],[ci(1,:) fliplr(ci(2,:))], 'r', 'FaceAlpha',.2, 'EdgeColor','none')
+hold on
+plot(time2use, mean(matrix2plot), 'r')
+subplot(3,1,3)
+
+
+histogram(pctg_calling_Ai, 0:1:100, 'Normalization','cdf')
+hold on
+histogram(pctg_calling_A, 0:1:100, 'Normalization','cdf')
+
+%%
+
+
+
+
+
+
+
+%%
+% saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\CallAnalysis';
+% 
+% 
+% all_stacked_correlations = cell2table(all_stacked_correlations);
+% all_stacked_correlations.Properties.VariableNames = {'CorrelationPouncing','CorrelationBeingPounce', 'PValPouncing','PValBeingPounce', 'DeviancePouncing','DevianceBeingPounce','GLMPvalue1','GLMPvalue2','PValPouncingCall','PValBeingPounceCall'   ,'Area', 'AnimalSession'};
+% all_stacked_correlations.Area(ismember(all_stacked_correlations.Area, 'isRT')) = {'isRt'};
+% save([saving_folder,'\all_stacked_correlations.mat'],'all_stacked_correlations')
+%%
+saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\CallAnalysis';
+
+load([saving_folder,'\all_stacked_correlations.mat'])
+
+% manual_order1 = [7 5 3 2 6 8 4 9 10 1]; 
+manual_order1 = [7  2 6 8 4 ];
+
+% manual_order1 = 1:7;
+% manual_order2 = [5 3 1 4 6 2 7 8]; 
+% manual_order2 = manual_order1;
+
+% manual_order2 = [5 3 1 4 6 2 7 8];
+manual_order2 = flip([ 4 8 6 2 7 ]);
+
+figure
+subplot(1,2,1)
+
+% significant = all_stacked_correlations.GLMPvalue1<0.05 & (all_stacked_correlations.DeviancePouncing<0.05 | all_stacked_correlations.PValPouncingCall>=0.05);
+significant = all_stacked_correlations.GLMPvalue1<0.05;
+
+% Neurons whose glm between neuron rate and pounce length is significant
+
+sign_corr = all_stacked_correlations.CorrelationPouncing<0;
+
+
+[counts_sig_neg, areas_sign_neg] = groupcounts(all_stacked_correlations.Area(significant & sign_corr));
+
+sign_corr = all_stacked_correlations.CorrelationPouncing>0;
+
+[counts_sig_pos, areas_sign_pos] = groupcounts(all_stacked_correlations.Area(significant & sign_corr));
+
+[all_counts, all_areas] = groupcounts(all_stacked_correlations.Area);
+
+bar_counts = zeros(numel(all_areas),4);
+
+for j=1:numel(all_areas)
+    loc = find(ismember(areas_sign_pos,all_areas{j}));
+    if ~isempty(loc)
+        bar_counts(j,1)  = counts_sig_pos(loc);
+    end
+
+    loc = find(ismember(areas_sign_neg,all_areas{j}));
+     if ~isempty(loc)
+        bar_counts(j,2)  = counts_sig_neg(loc);
+     end
+     bar_counts(j,3) =  all_counts(j)-sum(bar_counts(j,1:2));
+     bar_counts(j,4) =  all_counts(j);
+end
+
+bar_proportions = diag(1./bar_counts(:,4))*bar_counts;
+
+bar(100*bar_proportions(manual_order1, [2 1 ]), 'stacked')
+xticks(1:numel(all_areas))
+xticklabels(all_areas(manual_order1))
+axis square
+ylim([0 20])
+camroll(-90)
+set(gca,'YDir','normal') 
+
+
+subplot(1,2,2)
+significant = all_stacked_correlations.GLMPvalue1<0.05 & ...
+    (all_stacked_correlations.DeviancePouncing<0.05 ...
+    | all_stacked_correlations.PValPouncingCall>=0.05); 
+
+% Neurons whose glm between neuron rate and pounce length is significant & 
+% (adding call rate to previos glm do not improve model |
+% call rate do not correlate with pounc elength)
+
+
+sign_corr = all_stacked_correlations.CorrelationPouncing<0;
+
+
+[counts_sig_neg, areas_sign_neg] = groupcounts(all_stacked_correlations.Area(significant & sign_corr));
+
+sign_corr = all_stacked_correlations.CorrelationPouncing>0;
+
+[counts_sig_pos, areas_sign_pos] = groupcounts(all_stacked_correlations.Area(significant & sign_corr));
+
+[all_counts, all_areas] = groupcounts(all_stacked_correlations.Area(all_stacked_correlations.PValPouncingCall>=0.05));
+
+bar_counts = zeros(numel(all_areas),4);
+
+for j=1:numel(all_areas)
+    loc = find(ismember(areas_sign_pos,all_areas{j}));
+    if ~isempty(loc)
+        bar_counts(j,1)  = counts_sig_pos(loc);
+    end
+
+    loc = find(ismember(areas_sign_neg,all_areas{j}));
+     if ~isempty(loc)
+        bar_counts(j,2)  = counts_sig_neg(loc);
+     end
+     bar_counts(j,3) =  all_counts(j)-sum(bar_counts(j,1:2));
+     bar_counts(j,4) =  all_counts(j);
+end
+
+bar_proportions = diag(1./bar_counts(:,4))*bar_counts;
+
+bar(100*bar_proportions(manual_order2, [2 1 ]), 'stacked')
+xticks(1:numel(all_areas))
+xticklabels(all_areas(manual_order2))
+axis square
+ylim([0 20])
+camroll(-90)
+set(gca,'YDir','normal') 

@@ -263,6 +263,7 @@ for ch_n=1:numel(mid_PAG_channel)
         psth_struct.min_separation          = min_separation;
         psth_struct.three_point_tw          = three_point_tw;
         psth_struct.pow_spectrogram         = pow_spectrogram;
+        psth_struct.spect_time              = spect_time;
 
 
     else

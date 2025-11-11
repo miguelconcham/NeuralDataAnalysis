@@ -11,7 +11,8 @@ animal_file_names(1) = [];
 % animal2exclude = {'B4D4 0826 Dual'};
 animal2exclude = {''};
 animal_list(ismember(animal_file_names,animal2exclude)) = [];
-% animal_names ={};
+animal_list = animal_list(2:3);
+animal_names ={};
 % n_strctut = 1;
 
 % psth_structure = [];
@@ -29,7 +30,7 @@ f               = 5:.1:14;
 freq_pow_range  = [6 12];
 
 %%
-for fn = 12:numel(animal_list)
+for fn = 2:numel(animal_list)
 
     if fn==1
         psth_structure = GENERATE_THETA_PSTH_MAPS([npx_Raw_Data, '\', animal_list(fn).name],wind_length,wind_overlap,min_separation,f,freq_pow_range )
@@ -51,13 +52,20 @@ for fn = 12:numel(animal_list)
 end
 %% save if needed
 disp('saving')
-save([saving_folder,'\psth_structure_delta_map.mat'],'psth_structure', '-v7.3');
-save([saving_folder,'\animal_names_delta_map.mat'],'animal_names');
+save([saving_folder,'\psth_structure_delta_map_corrected_files.mat'],'psth_structure', '-v7.3');
+save([saving_folder,'\animal_names_delta_map_corrected_files.mat'],'animal_names');
 
 %% load if needed
 disp('loading')
-load([saving_folder,'\psth_structure_theta_map.mat'],'psth_structure');
-load([saving_folder,'\animal_names_theta_map.mat'],'animal_names');
+saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
+
+load([saving_folder,'\psth_structure_delta_map.mat'],'psth_structure');
+load([saving_folder,'\animal_names_delta_map.mat'],'animal_names');
+
+psth_structure_all_files = psth_structure;
+animal_names_all_files = animal_names;
+load([saving_folder,'\psth_structure_delta_map_corrected_files.mat'],'psth_structure');
+load([saving_folder,'\animal_names_delta_map_corrected_files.mat'],'animal_names');
 disp('ready')
 %% merging_psth
 smooth_wind     = 20;
@@ -71,7 +79,7 @@ allResults_persession = [];
 global_sn = 1;
 animal_index = [];
 session_probe_index = [];
-for an =1:numel(animal_label)-1
+for an=1:numel(animal_label)
     electorde_numner = [1 2];
     bin_size = psth_structure(1).wind_length - psth_structure(1).wind_overlap;
     psth_ranges = psth_structure(1).hist_range;
@@ -292,7 +300,7 @@ for an =1:numel(animal_label)-1
 end
 %%
 
-[alignedVals, alignedAreas, alignedY] = align_by_area(allResults, {'LPAG','VLPAG', 'DLPAG', 'DR'});
+[alignedVals, alignedAreas, alignedY] = align_by_area(allResults, {'LPAG'});
 [valsResampled, yResampled] = resample_segments_simple(alignedVals, alignedY, nbins);
 figure; hold on;
 stacked_val = []
@@ -313,7 +321,7 @@ legend show
 
 %%
 
-[alignedVals, alignedAreas, alignedY] = align_by_area(allResults_persession, {'LPAG','VLPAG', 'DLPAG', 'DR'});
+[alignedVals, alignedAreas, alignedY] = align_by_area(allResults_persession, {'LPAG', 'SupCol'});
 [valsResampled, yResampled] = resample_segments_simple(alignedVals, alignedY, nbins);
 figure; hold on;
 stacked_val = []
@@ -322,11 +330,10 @@ for i = 1:numel(alignedVals)
     plot(yResampled{i}, valsResampled{i});
 end
 
-%%
-animal_names
+
 
 animal_label    = {'B1D1','B1S3','B2S2','B3D2', 'B4S2', 'B4D4'};
-sessions2include = [1 1 1 1 1 1 1 1 1 0 1 1]==1;
+sessions2include = [1 0 0 1 1 1 1 1 1 1 1 1]==1;
 repeated_measures = [1 1 1 2 2 2 3 3 3 4 5 6]';
 
  
@@ -344,6 +351,7 @@ for t = 1:T
                 'VariableNames', {'y','Subject'});
     
     % Fit random intercept model
+    if sum(isnan(tbl.y))<1
     lme = fitlme(tbl, 'y ~ 1 + (1|Subject)');
     
     % Extract fixed effect (intercept)
@@ -351,6 +359,7 @@ for t = 1:T
     
     intercepts(t) = coefTable.Estimate(1);   % intercept estimate
     pvals(t)      = coefTable.pValue(1);
+    end
 end
 
 xline(0,'k--','Target Area'); % target area centered
@@ -358,7 +367,7 @@ xlabel('Relative Wrapped Position');
 ylabel('Value');
 legend show
 
-%%
+
 figure
 % plot(stacked_val', ':k')
 hold on
@@ -572,7 +581,7 @@ plot([0 0], [-.1 .5], 'k', 'HandleVisibility','off')
 % [h,p,ci, stats] = ttest(matrix2test{1}-matrix2test{2});
 
 
-h = pvals<0.05;
+h = pvals<0.01;
 
 beg_end = [find(diff([0; h; 0])==1) find(diff([0; h; 0])==-1)-1];
 sub_time = time(index2estimate);

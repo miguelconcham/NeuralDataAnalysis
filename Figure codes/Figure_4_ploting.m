@@ -1,7 +1,7 @@
 %% define saving folder
 saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
-figures_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Codes\Figure codes\Figure 5 Inputs';
-%%
+figures_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Codes\Figure codes\Figure 3 Updated';
+%% peak and trough diagram
 figure
 x = (1:2000)/1000;
 y_red = sin(2*pi*((1:2000)/1000)-pi/2 );
@@ -16,157 +16,15 @@ plot(360*x - 180,y_blue, 'b' )
 xticks([- 180 -90 0 90 180 270 360])
 
 
-%% delta and theta comparisson
-
-% load([saving_folder,'\theta_all_neurons.mat'],'all_neurons');
-% all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
-% all_neurons_theta = all_neurons;
-load([saving_folder,'\delta_all_neurons.mat'],'all_neurons');
-all_neurons.area(ismember(all_neurons.area, {'isRT'})) =     {'isRt'  };
-all_neurons_delta = all_neurons;
 
 
-
-
-% theta_partner_1 = all_neurons_theta.EntireSession.PPCPval;
-
-
-
-alpha = 0.05;
-
-
-% area_list = unique(all_neurons.area)';
-
-% area_list =  {'4N'	'DLPAG'	'DMPAG'	'DR'	'InfCol'	'LPAG'	'LSD'	'LSI'	'SupCol'	'VLPAG'	'isRt'	'mlf'};
-
-area_list = {'SupCol' 'DLPAG'	'LPAG'	'VLPAG' 'DR' 'isRt'	'mlf'};
-
-
-percentages_partner_1 = zeros(numel(area_list),4);
-percentages_partner_2 = zeros(numel(area_list),4);
-
-
-for an=1:numel(area_list)
-    area_index = strcmp(all_neurons.area, area_list{an});
-    percentages_partner_1(an,1) = sum(all_neurons_theta.Partner1.PPCPval(area_index)<alpha & all_neurons_delta.Partner1.PPCPval(area_index)>alpha)/sum(~isnan(all_neurons_theta.Partner1.PPCPval(area_index)));
-    percentages_partner_1(an,2) = sum(all_neurons_delta.Partner1.PPCPval(area_index)<alpha & all_neurons_theta.Partner1.PPCPval(area_index)>alpha)/sum(~isnan(all_neurons_delta.Partner1.PPCPval(area_index)));
-    percentages_partner_1(an,3) =  sum(all_neurons_delta.Partner1.PPCPval(area_index)<alpha & all_neurons_theta.Partner1.PPCPval(area_index)<alpha)/sum(~isnan(all_neurons_delta.Partner1.PPCPval(area_index)));
-
-    percentages_partner_2(an,1) = sum(all_neurons_theta.Partner2.PPCPval(area_index)<alpha & all_neurons_delta.Partner2.PPCPval(area_index)>alpha)/sum(~isnan(all_neurons_theta.Partner2.PPCPval(area_index)));
-    percentages_partner_2(an,2) = sum(all_neurons_delta.Partner2.PPCPval(area_index)<alpha & all_neurons_theta.Partner2.PPCPval(area_index)>alpha)/sum(~isnan(all_neurons_delta.Partner2.PPCPval(area_index)));
-    percentages_partner_2(an,3) =  sum(all_neurons_delta.Partner2.PPCPval(area_index)<alpha & all_neurons_theta.Partner2.PPCPval(area_index)<alpha)/sum(~isnan(all_neurons_delta.Partner2.PPCPval(area_index)));
-end
-
-
-
-
-
-percentages_partner_1(:,4) = 1-sum(percentages_partner_1,2);
-percentages_partner_2(:,4) = 1-sum(percentages_partner_2,2);
-
-
-figure
-subplot(1,2,1)
-bar(percentages_partner_1, 'stacked')
-xticks(1:numel(area_list))
-xticklabels(area_list)
-
-
-subplot(1,2,2)
-bar(percentages_partner_2, 'stacked')
-xticks(1:numel(area_list))
-xticklabels(area_list)
-
-
-%%
-
-
-figure
-area_list = {'SupCol' 'DLPAG'	'LPAG'	'VLPAG' 'DR' 'isRt'	};
-edges = -pi:(pi/12):pi;
-edges_centers = .5*(edges(2:end) + edges(1:end-1));
-double_centers = [edges_centers (2*pi+edges_centers)]
-colormap(1-gray)
-for an =1:numel(area_list)
-    subplot(1,6,an)
-    area_index = ismember(all_neurons_delta.area,area_list{an});
-    entreinment_index =all_neurons_delta.EntireSession.PPCPval<0.05 | all_neurons_theta.EntireSession.PPCPval<0.05;
-
-   count_matrix = histcounts2(all_neurons_delta.EntireSession.PreferedAngle(area_index & entreinment_index),all_neurons_theta.EntireSession.PreferedAngle(area_index & entreinment_index), edges,edges);
-   count_matrix = count_matrix/sum(sum(count_matrix));
-   staked_matrix = [[count_matrix count_matrix];[count_matrix count_matrix]];
-   pcolor(180*double_centers/pi,180*double_centers/pi, staked_matrix)
-shading interp
-% axis([-100 200 -100 200])
-
-% plot(180*all_neurons_delta.EntireSession.PreferedAngle(area_index & entreinment_index)/pi,180*all_neurons_theta.EntireSession.PreferedAngle(area_index & entreinment_index)/pi, '.')
-title(area_list{an})
-end
-
-%%
-
-figure
-colormap(1-gray)
-  entreinment_index =(all_neurons_delta.EntireSession.PPCPval<0.05 | all_neurons_theta.EntireSession.PPCPval<0.05) & ...
-      ~isnan(all_neurons_delta.EntireSession.PreferedAngle) & ~isnan(all_neurons_theta.EntireSession.PreferedAngle);
-
-   count_matrix = histcounts2(all_neurons_delta.EntireSession.PreferedAngle( entreinment_index),all_neurons_theta.EntireSession.PreferedAngle( entreinment_index), edges,edges);
-   count_matrix = count_matrix/sum(sum(count_matrix));
-   staked_matrix = [[count_matrix count_matrix];[count_matrix count_matrix]];
-   pcolor(180*double_centers/pi,180*double_centers/pi, staked_matrix)
-   shading flat
-
-   %% 4 d representation
-      delta_angles = all_neurons_delta.EntireSession.PreferedAngle( entreinment_index);
-      theta_angles = all_neurons_theta.EntireSession.PreferedAngle( entreinment_index);
-      areas_name = all_neurons_theta.area(entreinment_index);
-angles_4D = [cos(delta_angles) sin(delta_angles) cos(theta_angles) sin(theta_angles)];
-
-Kmax = 10;  % maximum number of clusters to test
-
-% Use evalclusters with silhouette criterion
-eva = evalclusters(angles_4D, @kmeans, 'silhouette','Distance', 'cityblock', 'KList', 1:Kmax);
-
-
-
-[cluster_idx, C, sumd] = kmeans(angles_4D, eva.OptimalK, ...
-                        'Distance', 'cityblock', ...
-                        'Replicates', 10);
-
-
-bar_plot = nan(numel(area_list),2);
-count_plot = nan(numel(area_list),1);
-
-for an =1:numel(area_list)
-
-    index = ismember(areas_name,area_list{an});
-    count_plot(an) = sum(index);
-    bar_plot(an,1) = sum(cluster_idx(index)==1)/count_plot(an);
-    bar_plot(an,2) = sum(cluster_idx(index)==2)/count_plot(an);
-end
-
-
-
-figure
-subplot(5,1,1:3)
-plot(delta_angles(cluster_idx==1), theta_angles(cluster_idx==1), '.r')
-hold on
-plot(delta_angles(cluster_idx==2), theta_angles(cluster_idx==2), '.b')
-
-
-subplot(5,1,4:5)
-bar(bar_plot, 'stacked')
-
-
-
-
-
-%%
 
 %% load delta or theta
+% load([saving_folder,'\delta_phase_couplig_structure_updated_with_non_playbouts.mat'],'phase_struct');
+% load([saving_folder,'\delta_phase_couplig_animal_names_updated_with_non_playbouts.mat'],'animal_names');
+
 load([saving_folder,'\theta_phase_couplig_structure_updated.mat'],'phase_struct');
 load([saving_folder,'\theta_phase_couplig_animal_names_updated.mat'],'animal_names');
-
 
 % load([saving_folder,'\delta_phase_couplig_structure_updated.mat'],'phase_struct');
 % load([saving_folder,'\delta_phase_couplig_animal_names_updated.mat'],'animal_names');
@@ -217,17 +75,17 @@ for ns = 1:numel(phase_struct)
 end
 %%
 save([saving_folder,'\tehta_all_neurons_v2.mat'],'all_neurons');
-%%
+%% ploting entrainment per area and psths
 psth_edges = phase_struct(1).edges_freq;
 psth_centers = .5*(psth_edges(1:end-1) + psth_edges(2:end));
 
 
 center_index = psth_centers>=-.25 & psth_centers<=.25;
 selected_bin_size=0.001;
-x_lim = [-.2 .2];
+x_lim = [-.5 .5];
 freq2ilter = 40;
 c_lim =[-10 10] ;
-y_lim = [-20 20]
+y_lim = [-5 5]
 alpha = 0.01;
 figure
 area_list = {'SupCol' 'DLPAG'	'LPAG'	'VLPAG' 'DR' 'isRt'};
@@ -352,9 +210,262 @@ for an=1:numel(area_list)
 
     pause(.1)
 end
+%% plot all area together
+figure
+psth_edges = phase_struct(1).edges_freq;
+psth_centers = .5*(psth_edges(1:end-1) + psth_edges(2:end));
+
+
+center_index = psth_centers>=-.25 & psth_centers<=.25;
+selected_bin_size=0.001;
+x_lim = [-.2 .2];
+freq2ilter = 40;
+c_lim =[-15 15] ;
+y_lim = [-15 15]
+alpha = 0.01;
+area_list = {'SupCol' 'DLPAG'	'LPAG'	'VLPAG' 'DR'};
+area_index   = ismember(all_neurons.area, area_list);
+entrained_index = all_neurons.EntireSession.PPCPval<alpha & ~isnan(all_neurons.EntireSession.PPC);
+
+psth_entrained = squeeze(entire_recording_psth(1,entrained_index & area_index,:));
+if size(psth_entrained,2)==1
+    psth_entrained = psth_entrained';
+end
+entrained_angles = all_neurons.EntireSession.PreferedAngle(entrained_index & area_index);
+entrained_mvl   = all_neurons.EntireSession.MVL(entrained_index & area_index);
+
+
+
+for j=1:size(psth_entrained,1)
+    psth_entrained(j,:) = smooth(psth_entrained(j,:),round((1/freq2ilter)/selected_bin_size));
+    psth_entrained(j,:) = 100*(psth_entrained(j,:) - mean(psth_entrained(j,:),'omitmissing'))/mean(psth_entrained(j,:),'omitmissing');
+end
+
+
+
+psth_non_entrained = squeeze(entire_recording_psth(1,~entrained_index & area_index,:));
+non_entrained_angles = all_neurons.EntireSession.PreferedAngle(~entrained_index & area_index);
+non_entrained_mvl = all_neurons.EntireSession.MVL(~entrained_index & area_index);
+for j=1:size(psth_non_entrained,1)
+    psth_non_entrained(j,:) = smooth(psth_non_entrained(j,:),round((1/freq2ilter)/selected_bin_size));
+    psth_non_entrained(j,:) = 100*(psth_non_entrained(j,:) - mean(psth_non_entrained(j,:),'omitmissing'))/mean(psth_non_entrained(j,:),'omitmissing');
+end
+
+
+entrained_angles(isnan(entrained_angles)) = 0;
+[sorted_angles, order] = sort(entrained_angles);
+matrix2plot = psth_entrained(order,:);
+
+subplot(4,1 ,1)
+hold on
+y_ticks = 180*sorted_angles/pi;
+imagesc(psth_centers,y_ticks ,matrix2plot)
+hold on
+axis xy
+[pos_90, loc_90]    = min(abs((180*sorted_angles/pi )-90));
+[pos_270, loc_270]  = min(abs((180*sorted_angles/pi)+90));
+[pos_0, loc_0]       = min(abs((180*sorted_angles/pi)));
+clim(c_lim)
+xlim(x_lim)
+ylim([-180 180])
+plot([psth_centers(1) psth_centers(end)],y_ticks([loc_0 loc_0]), 'w')
+plot([psth_centers(1) psth_centers(end)],y_ticks([loc_270 loc_270]), 'w')
+plot([psth_centers(1) psth_centers(end)],y_ticks([loc_90 loc_90]), 'w')
+yticks([-180 y_ticks([loc_270 loc_0 loc_90])' 180])
+yticklabels({'-180','-90','0','90','180'})
+% title(area_list)
+
+subplot(4,1 ,2)
+selection = max(abs((matrix2plot-repmat(mean(matrix2plot,2),1,size(matrix2plot,2)))./repmat(std(matrix2plot,[],2),1,size(matrix2plot,2))),[],2)<8;
+
+index = sorted_angles>pi/2 | sorted_angles<-pi/2;
+[~, ~, ci] = ttest(matrix2plot(index & selection,:));
+% ci = prctile(matrix2plot,[5 95]);
+fill([psth_centers fliplr(psth_centers)], [ci(1,:) fliplr(ci(2,:))], 'b', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(psth_centers, mean(matrix2plot(index & selection,:)), 'b', 'LineWidth',2)
+
+
+[~, ~, ci] = ttest(matrix2plot(~index & selection,:));
+fill([psth_centers fliplr(psth_centers)], [ci(1,:) fliplr(ci(2,:))], 'r', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(psth_centers, mean(matrix2plot(~index & selection,:)), 'r', 'LineWidth',2)
+ylim(y_lim)
+xlim(x_lim)
+title({num2str(100*[sum(index) sum(~index)]/numel(index)),num2str([sum(index) sum(~index)])})
+
+subplot(4,1 ,3)
+hold on
+non_entrained_angles(isnan(non_entrained_angles)) =0;
+[sorted_angles, order] = sort(non_entrained_angles);
+matrix2plot = psth_non_entrained(order,:);
+
+imagesc(psth_centers, 180*sorted_angles/pi,matrix2plot)
+
+ylim([-180 180])
+plot([psth_centers(1) psth_centers(end)],[0 0], 'w')
+plot([psth_centers(1) psth_centers(end)],-[90 90], 'w')
+plot([psth_centers(1) psth_centers(end)],[90 90], 'w')
+axis xy
+clim(c_lim)
+yticks([-180 -90 0 90 180])
+xlim(x_lim)
+
+subplot(4,1 ,4)
+selection = max(abs((matrix2plot-repmat(mean(matrix2plot,2),1,size(matrix2plot,2)))./repmat(std(matrix2plot,[],2),1,size(matrix2plot,2))),[],2)<Inf;
+index = sorted_angles>-pi & sorted_angles<0;
+[~, ~, ci] = ttest(matrix2plot(index & selection,:));
+fill([psth_centers fliplr(psth_centers)], [ci(1,:) fliplr(ci(2,:))], 'b', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(psth_centers, mean(matrix2plot(index & selection,:)), 'b', 'LineWidth',2)
+
+
+
+[~, ~, ci] = ttest(matrix2plot(~index & selection,:));
+fill([psth_centers fliplr(psth_centers)], [ci(1,:) fliplr(ci(2,:))], 'r', 'FaceAlpha',.25, 'EdgeColor','none')
+hold on
+plot(psth_centers, mean(matrix2plot(~index & selection,:)), 'r', 'LineWidth',2)
+ylim(y_lim)
+xlim(x_lim)
+
+title({num2str(100*[sum(index) sum(~index)]/numel(index)),num2str([sum(index) sum(~index)])})
 %%
-print(gcf,'-vector','-dsvg',[figures_folder, '\phaselocking theta correct white lines and colorbar.svg'])
+print(gcf,'-vector','-dsvg',[figures_folder, '\phaselocking delt aall areas together.svg'])
+
 %%
+
+area_list = unique(all_neurons.area);
+
+freq2use        = 'EntireSession'; %options:   ThetaEntireSession DeltaEntireSession
+alpha_tresh = 0.01;
+an=2;
+area_index = ismember(all_neurons.area,area_list{an} );
+entrainment_index = all_neurons.(freq2use).PPCPval<alpha_tresh;
+this_Area_Angles = all_neurons.(freq2use).PreferedAngle(~isnan(all_neurons.(freq2use).PreferedAngle) & entrainment_index);
+
+figure
+polarhistogram(this_Area_Angles, -pi:(pi/16):pi)
+
+
+[mu, kappa, w, LL] = vm2_mixture_EM(this_Area_Angles+pi, 10000);
+LL2 = LL(end);
+
+[theta, kapa_unimodal] = circ_vmpar(this_Area_Angles);
+LL1 = sum(log(circ_vmpdf(this_Area_Angles, theta, kapa_unimodal)));
+
+LR = 2*(LL2 - LL1)
+
+%%
+% figure_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Codes\Figure codes\Figure 7 Inputs';
+% 
+% N = numel(this_Area_Angles);
+% nBoot = 10000;
+% LR_boot = zeros(nBoot,1);
+% 
+% for b = 1:nBoot
+%     boot_sample = circ_vmrnd(theta, kapa_unimodal, N);
+% 
+%     % Fit 2-component mixture
+%     [~, ~, ~, LL_boot] = vm2_mixture_EM(boot_sample, 100, 1e-6, false); % fewer iter for speed
+%     LL2_boot = LL_boot(end);
+% 
+%     % Log-likelihood under unimodal null
+%     LL1_boot = sum(log(circ_vmpdf(boot_sample, theta, kapa_unimodal)));
+% 
+%     LR_boot(b) = 2*(LL2_boot - LL1_boot);
+% end
+% 
+% p_value = mean(LR_boot >= LR);
+% 
+% save([figure_folder, '\LR_boot.mat'], 'LR_boot')
+%% proof that is bymodal
+
+figure_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Codes\Figure codes\Figure 7 Inputs';
+% figures_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Codes\Figure codes\Figure 5 Inputs';
+load([figure_folder, '\LR_boot.mat'], 'LR_boot')
+
+anged_edges = -pi:(pi/32):pi;
+angle_counts = histcounts(this_Area_Angles, anged_edges);
+angle_counts = angle_counts/sum(angle_counts);
+
+angle_centers = .5*(anged_edges(1:end-1)+anged_edges(2:end));
+
+mixtured_model  = w .* circ_vmpdf(angle_centers, mu(1)-pi, kappa(1)) + ...
+      (1-w) .* circ_vmpdf(angle_centers, mu(2)-pi, kappa(2));
+mixtured_model = mixtured_model'/sum(mixtured_model);
+figure
+plot([angle_centers ,angle_centers+2*pi],[angle_counts angle_counts], 'k')
+hold on
+plot([angle_centers ,angle_centers+2*pi],[mixtured_model mixtured_model], 'b')
+
+
+figure
+subplot(2,1,1)
+histogram(LR_boot, 250, 'FaceColor', 'k', 'EdgeColor', 'none')
+y_lim = ylim;
+hold on
+plot([LR LR],y_lim,'r')
+
+
+xscale log
+xlim([.1 LR+10])
+
+mixtured_model  = w .* circ_vmpdf(anged_edges, mu(1)-pi, kappa(1)) + ...
+      (1-w) .* circ_vmpdf(anged_edges, mu(2)-pi, kappa(2));
+mixtured_model = mixtured_model'/sum(mixtured_model);
+
+subplot(2,1,2)
+polarplot(anged_edges,[angle_counts,angle_counts(1)], 'k' )
+hold on
+polarplot(anged_edges,mixtured_model, 'r' )
+r_lim = rlim;
+
+polarplot([mu(1) mu(1)]-pi,r_lim, 'b' )
+
+polarplot([mu(2) mu(2)]-pi,r_lim, 'r' )
+%%
+
+print(gcf,'-vector','-dsvg',[figures_folder, '\two distribution plot.svg'])
+
+%% percentages_per_area
+area_list = {'SupCol','DLPAG','LPAG','VLPAG', 'DR'}
+number_per_area = nan(numel(area_list),4);
+for an=1:numel(area_list)
+    area_index = ismember(all_neurons.area,area_list{an} );
+    entrainment_index = all_neurons.(freq2use).PPCPval<alpha_tresh;
+    this_Area_Angles = all_neurons.(freq2use).PreferedAngle(~isnan(all_neurons.(freq2use).PreferedAngle) & entrainment_index & area_index);
+
+    number_per_area(an,1) = sum(this_Area_Angles>pi/2 | this_Area_Angles<-pi/2);
+     number_per_area(an,2) = sum(~(this_Area_Angles>pi/2 | this_Area_Angles<-pi/2));
+     number_per_area(an,3) = sum(~entrainment_index & area_index & ~isnan(all_neurons.(freq2use).PreferedAngle));
+     number_per_area(an,4) = sum( area_index & ~isnan(all_neurons.(freq2use).PreferedAngle));
+
+end
+
+
+figure
+subplot(4,1,1)
+bar(diag(1./number_per_area(:,4))*[number_per_area(:,4)-number_per_area(:,3) number_per_area(:,3)], 'stacked')
+legend({'Entrained','Non entrained'})
+ylabel('%')
+subplot(4,1,2:4)
+bar(diag(1./sum(number_per_area(:,1:2),2))*number_per_area(:,1:2), 'stacked')
+xticklabels(area_list)
+ylabel('%')
+legend({'Trough','Peak'})
+
+
+
+
+figure
+subplot(4,1,1)
+bar([number_per_area(:,4)-number_per_area(:,3) number_per_area(:,3)])
+subplot(4,1,2:4)
+bar(number_per_area(:,1:2))
+xticklabels(area_list)
+%%
+print(gcf,'-vector','-dsvg',[figures_folder, '\percentage of trough and peak cells per area.svg'])
+%% plot modulation strength by angle
 
 x_lim = [-.2 .2];
 figure
@@ -612,7 +723,7 @@ ylim([-100 100])
 
 print(gcf,'-vector','-dsvg',[figures_folder, '\phaselocking partner1 partner2 theta.svg'])
 
-%%
+%% correlation between entrainment and rate
 no_nan      = ~isnan(concatenated_rate_differences(:,1)) &  ~isnan(concatenated_phase_differences(:,1));
 in_range    = abs(concatenated_rate_differences(:,1)  - mean(concatenated_rate_differences(:,1), 'omitmissing'))/std(concatenated_rate_differences(:,1), 'omitmissing')<4 ... 
     & abs(concatenated_phase_differences(:,1)  - mean(concatenated_phase_differences(:,1), 'omitmissing'))/std(concatenated_phase_differences(:,1), 'omitmissing')<4 ;
@@ -736,7 +847,7 @@ xlim(x_lim)
 %%
 print(gcf,'-vector','-dsvg',[figures_folder, '\neuron example psth.svg'])
 
-%%
+%% now plot neurons
 
 figure
 x_lim = [286 292];
@@ -800,177 +911,3 @@ polarhistogram(delta_peak_phases, -pi:(pi/32):pi,'FaceColor', 'r', 'EdgeColor','
 print(gcf,'-vector','-dsvg',[figures_folder, '\neuron example lfp and spikes.svg'])
 
 
-%% load theta
-theta_bin_size = 0.001;
-
-load([saving_folder,'\theta_phase_couplig_structure.mat'],'phase_struct');
-load([saving_folder,'\theta_phase_couplig_animal_names.mat'],'animal_names');
-% phase_struct(6 )=[];
-% animal_names(6,:)=[];
-
-%%
-phase_prop_names = {'PreferedAngle','MVL','MVLPval','PPC','PPCPval','MeanRate', 'Id'};
-
-
-all_session_phase_stats = [];
-all_session_psth        = [];
-entire_recording_psth = [];
-
-all_neurons = [];
-for ns = 1:numel(phase_struct)
-
-    all_session_phase_stats = cat(2,all_session_phase_stats, phase_struct(ns).session_phase_stats(1:2,:,:));
-    all_session_psth = cat(2,all_session_psth, phase_struct(ns).session_psth(1:2,:,:));
-    entire_recording_psth = cat(2,entire_recording_psth, phase_struct(ns).entire_recording_psth);
-    entre_session_stats = phase_struct(ns).entire_recording_phase_stats;
-
-    this_session_cluster_info = phase_struct(ns).cluster_info;
-    sub_Table =  array2table(squeeze(phase_struct(ns).session_phase_stats(1,:,:)));
-    sub_Table.Properties.VariableNames = phase_prop_names;
-    this_session_cluster_info.Partner1 =sub_Table;
-    sub_Table =  array2table(squeeze(phase_struct(ns).session_phase_stats(2,:,:)));
-    sub_Table.Properties.VariableNames = phase_prop_names;
-    this_session_cluster_info.Partner2 =sub_Table;
-    sub_Table =  array2table(squeeze(phase_struct(ns).entire_recording_phase_stats(1,:,:)));
-    sub_Table.Properties.VariableNames = phase_prop_names;
-    this_session_cluster_info.EntireSession =sub_Table;
-    this_session_cluster_info.session = repmat(animal_names(ns,1),size(this_session_cluster_info,1),1);
-
-    all_neurons = [all_neurons; this_session_cluster_info];
-end
-
-
-%% partner 1 plot
-x_lim = [-.125 .125]
-freq2ilter = 25;
-alpha = 0.01;
-c_lim = [-20 20]
-y_lim = [-20 20]
-% area_list = {'DLPAG'	'DMPAG'	'DR'	'InfCol'	'LPAG'		'SupCol'	'VLPAG'	'isRt'	'mlf'};
-
-area_list = {'SupCol' 'DLPAG'	'LPAG'	'VLPAG' 'DR' 'isRt'	'mlf'};
-
-figure
-for an=1:numel(area_list)
-    area_index = strcmp(all_neurons.area, area_list{an});
-    entrained_index = all_neurons.Partner1.PPCPval<alpha;
-
-    psth_entrained = squeeze(entire_recording_psth(1,entrained_index & area_index,:));
-    if size(psth_entrained,2)==1
-        psth_entrained = psth_entrained';
-    end
-    entrained_angles = all_neurons.EntireSession.PreferedAngle(entrained_index & area_index);
-
-
-    for j=1:size(psth_entrained,1)
-        psth_entrained(j,:) = smooth(psth_entrained(j,:),round((1/freq2ilter)/theta_bin_size));
-        psth_entrained(j,:) = 100*(psth_entrained(j,:) - mean(psth_entrained(j,:),'omitmissing'))/mean(psth_entrained(j,:),'omitmissing');
-    end
-
-
-    psth_non_entrained = squeeze(entire_recording_psth(1,~entrained_index & area_index,:));
-    non_entrained_angles = all_neurons.EntireSession.PreferedAngle(~entrained_index & area_index);
-
-    for j=1:size(psth_non_entrained,1)
-        psth_non_entrained(j,:) = smooth(psth_non_entrained(j,:),round((1/freq2ilter)/theta_bin_size));
-        psth_non_entrained(j,:) = 100*(psth_non_entrained(j,:) - mean(psth_non_entrained(j,:),'omitmissing'))/mean(psth_non_entrained(j,:),'omitmissing');
-    end
-
-    psth_edges = phase_struct(1).edges_freq;
-    psth_centers = .5*(psth_edges(1:end-1) + psth_edges(2:end));
-    [sorted_angles, order] = sort(entrained_angles);
-    matrix2plot = psth_entrained(order,:);
-    subplot(4,numel(area_list) ,an)
-
-    imagesc(psth_centers, 1:size(psth_entrained,1),matrix2plot)
-    axis xy
-    clim(c_lim)
-    xlim(x_lim)
-    title(area_list{an})
-
-    subplot(4,numel(area_list) ,numel(area_list) + an)
-    [~, ~, ci] = ttest(matrix2plot);
-    fill([psth_centers fliplr(psth_centers)], [ci(1,:) fliplr(ci(2,:))], 'k', 'FaceAlpha',.25, 'EdgeColor','none')
-    hold on
-    plot(psth_centers, mean(matrix2plot), 'k', 'LineWidth',2)
-    ylim(y_lim)
-    xlim(x_lim)
-
-    subplot(4,numel(area_list) ,2*numel(area_list) +an)
-    [sorted_angles, order] = sort(non_entrained_angles);
-    matrix2plot = psth_non_entrained(order,:);
-    imagesc(psth_centers, 1:size(psth_non_entrained,1),matrix2plot)
-    axis xy
-    clim(c_lim)
-    xlim(x_lim)
-
-    subplot(4,numel(area_list) ,3*numel(area_list) +an)
-    [~, ~, ci] = ttest(matrix2plot);
-
-    fill([psth_centers fliplr(psth_centers)], [ci(1,:) fliplr(ci(2,:))], 'k', 'FaceAlpha',.25, 'EdgeColor','none')
-    hold on
-    plot(psth_centers, mean(matrix2plot), 'k', 'LineWidth',2)
-    ylim(y_lim)
-    xlim(x_lim)
-
-    pause(.1)
-
-end
-
-
-
-%%
-
-%% partner 1 plot
-x_lim = [-.125 .125]
-freq2ilter = 25;
-alpha = 0.05;
-for an=1:numel(area_list)
-    area_index = strcmp(all_neurons.area, area_list{an});
-    entrained_index = all_neurons.Partner2.PPCPval<alpha;
-
-    psth_entrained = squeeze(all_session_psth(1,entrained_index & area_index,:));
-    if size(psth_entrained,2)==1
-        psth_entrained = psth_entrained';
-    end
-    entrained_angles = all_neurons.Partner2.PreferedAngle(entrained_index & area_index);
-
-
-    for j=1:size(psth_entrained,1)
-        psth_entrained(j,:) = smooth(psth_entrained(j,:),round(freq2ilter/theta_bin_size));
-        psth_entrained(j,:) = 100*(psth_entrained(j,:) - mean(psth_entrained(j,:)))/mean(psth_entrained(j,:));
-    end
-
-
-    psth_non_entrained = squeeze(all_session_psth(1,~entrained_index & area_index,:));
-    non_entrained_angles = all_neurons.Partner2.PreferedAngle(~entrained_index & area_index);
-
-    for j=1:size(psth_non_entrained,1)
-        psth_non_entrained(j,:) = smooth(psth_non_entrained(j,:),round(freq2ilter/delta_bin_size));
-        psth_non_entrained(j,:) = 100*(psth_non_entrained(j,:) - mean(psth_non_entrained(j,:)))/mean(psth_non_entrained(j,:));
-    end
-
-    psth_edges = phase_struct(1).edges_freq;
-    psth_centers = .5*(psth_edges(1:end-1) + psth_edges(2:end));
-    figure
-    subplot(2,1,1)
-    [sorted_angles, order] = sort(entrained_angles);
-    imagesc(psth_centers, 1:size(psth_entrained,1),psth_entrained(order,:))
-    axis xy
-    clim([-5 5])
-    xlim(x_lim)
-    title(area_list{an})
-
-
-    subplot(2,1,2)
-    [sorted_angles, order] = sort(non_entrained_angles);
-    imagesc(psth_centers, 1:size(psth_non_entrained,1),psth_non_entrained(order,:))
-    axis xy
-    clim([-5 5])
-    xlim(x_lim)
-
-
-
-    pause(.1)
-
-end

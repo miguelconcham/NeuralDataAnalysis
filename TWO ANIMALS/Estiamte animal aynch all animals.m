@@ -1,6 +1,7 @@
 
 two_animals_data = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\TWO ANIMALS';
 saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
+figure_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Codes\Figure codes\Figure Mutual informatin inputs';
 animal_list = dir(two_animals_data);
 animal_list(1:2) = [];
 
@@ -33,10 +34,52 @@ end
 
 %%
 
+behavior_structure = [];
+animal_names_behavior = [];
+n_strctut = 1;
+%%
+for fn = 1:numel(animal_list)
+    
+    if fn==1
+        behavior_structure = GENERATE_STRUCUTRE_animal_synch_only_behavior([two_animals_data, '\', animal_list(fn).name]);
+         
+        n_strctut = n_strctut+numel(behavior_structure);
+        animal_names_behavior = [animal_names_behavior;[repmat(animal_list(fn).name,numel(behavior_structure),1) num2cell(1:numel(behavior_structure))']];
+    else
+        transt_psth = GENERATE_STRUCUTRE_animal_synch_only_behavior([two_animals_data, '\', animal_list(fn).name] );
+      
+        for sub_j=1:numel(transt_psth)
+    
+            behavior_structure(n_strctut) = transt_psth(sub_j);
+            n_strctut = n_strctut+1;
+        end
+        animal_names_behavior = [animal_names_behavior;[repmat(animal_list(fn).name,numel(transt_psth),1) num2cell(1:numel(transt_psth))']]
+
+
+    end
+
+
+end
+
+
+%%
+
+disp('saving')
+save([saving_folder,'\behavior_structure_20bins_delta.mat'],'behavior_structure');
+save([saving_folder,'\animal_names_behavior_mi_structure_20bins_delta.mat'],'animal_names_behavior');
+%%
+
 disp('saving')
 save([saving_folder,'\mi_structure_20bins_delta.mat'],'mi_structure');
 save([saving_folder,'\animal_names_mi_structure_20bins_delta.mat'],'animal_names');
 
+%%
+
+saving_folder = '\\experimentfs.bccn-berlin.pri\experiment\PlayNeuralData\NPX-OPTO PLAY NMM\PlayBout Analysis\DataSets\Analysis results\Theta psth';
+
+disp('loading')
+load([saving_folder,'\mi_structure_20bins_delta.mat'],'mi_structure');
+load([saving_folder,'\animal_names_mi_structure_20bins_delta.mat'],'animal_names');
 %%   mergind data
 
 all_psth_onset          = [];
@@ -98,9 +141,12 @@ for ns=1:numel(mi_structure)
 end
 
 %% plot a psth
-ns =4;
+ns =5;
+
+
 
 this_play_bout = mi_structure(ns).play_bouts_table;
+this_behavior_table = behavior_structure(ns).Behavior;
 these_lengths = diff(this_play_bout')';
 [sorted_lengths, order] = sort(these_lengths);
 
@@ -126,6 +172,89 @@ hold on
 plot(sorted_lengths, 1:size(psth_zscored,2), 'w')
 plot(sorted_lengths*0, 1:size(psth_zscored,2), 'w')
 clim([-2 2])
+
+
+%%
+bin_size = mean(diff(psth_time));
+window_size = round(4*(1/3.5)/bin_size);
+stacked_correaltion = [];
+for pb_n = [16 24 23 21 13]
+figure('units','normalized','outerposition',[0 0 1 .5]);
+subplot(2,1,1)
+delta1 = squeeze(psth_zscored(1,order(pb_n), :));
+delta2 = squeeze(psth_zscored(2,order(pb_n), :));
+corr_values = nan(numel(delta1)-window_size,1);
+for j=window_size:numel(delta1)
+    corr_values(j-window_size+1) = corr(delta1((j-window_size+1):j),delta2((j-window_size+1):j));
+end
+correaltion_time = psth_time(round(window_size/2)+1:(round(window_size/2)+1+numel(delta1)-window_size));
+
+
+
+plot(psth_time,squeeze(psth_zscored(1,order(pb_n), :)), 'k')
+hold on
+plot(psth_time,squeeze(psth_zscored(2,order(pb_n), :)), 'r')
+this_pb_start = this_play_bout(order(pb_n),1);
+this_pb_end   = this_play_bout(order(pb_n),2);
+this_pb_length = sorted_lengths(pb_n);
+y_lim = [-5 5];
+ylim([-5 5]);
+y_locs = [y_lim(1) y_lim(1)+range(y_lim)/2;
+          y_lim(1)+range(y_lim)/2 y_lim(2)];
+behaviors_this_PB   = find(this_behavior_table.Start>=this_pb_start+psth_time(1) & this_behavior_table.Start<=this_pb_end+psth_time(end) & ~ismember(this_behavior_table.Animal, 'Session_structure'));
+animal_names        = this_behavior_table.Animal(behaviors_this_PB);
+animal_list = unique(animal_names);
+
+loc = double(ismember(animal_names,animal_list{1}));
+
+for j=1:numel(behaviors_this_PB)
+    beh_start   = this_behavior_table.Start(behaviors_this_PB(j))-this_pb_start;
+    beh_end     = this_behavior_table.End(behaviors_this_PB(j))-this_pb_start;
+    fill([beh_start beh_end beh_end beh_start],y_locs(loc(j)+1,[1 1 2 2]), 'k', 'FaceAlpha', .25, 'EdgeColor','none')
+    text(beh_start, mean(y_locs(loc(j)+1,[1 1 2 2])),this_behavior_table.Type(behaviors_this_PB(j)) )
+end
+fill([0 this_pb_length this_pb_length 0],y_lim([1 1 2 2]), 'r', 'FaceAlpha',.2)
+axis tight
+ylim([-5 5]);
+ xlim([psth_time(1) psth_time(end)]);
+title(pb_n)
+
+
+subplot(2,1,2)
+plot(correaltion_time,corr_values )
+stacked_correaltion = [stacked_correaltion;corr_values'];
+y_lim = ylim;
+hold on
+fill([0 this_pb_length this_pb_length 0],y_lim([1 1 2 2]), 'r', 'FaceAlpha',.2)
+ xlim([psth_time(1) psth_time(end)]);
+
+pause(.1)
+print(gcf,'-vector','-dsvg',[figure_folder, '\Two animal pow synch, ',num2str(pb_n),'.svg'])
+end
+
+%%
+normalized_correlation = stacked_correaltion;
+% for j=1:size(normalized_correlation,1)
+%     normalized_correlation(j,:) = (normalized_correlation(j,:)  - mean(normalized_correlation(j,correaltion_time<0),'omitmissing'))/std(normalized_correlation(j,correaltion_time<0) ,'omitmissing');
+% end
+
+
+figure
+subplot(2,1,1)
+imagesc(correaltion_time, 1:size(normalized_correlation),normalized_correlation)
+clim([-3 3])
+axis xy
+xlim([-1 1])
+subplot(2,1,2)
+
+hold on
+[~,~, ci] = ttest(normalized_correlation);
+no_nan = ~any(isnan(ci));
+fill([correaltion_time(no_nan) fliplr(correaltion_time(no_nan))],[ci(1,no_nan), fliplr(ci(2,no_nan))],'r', 'FaceAlpha',.2, 'EdgeColor','none')
+plot(correaltion_time,mean(normalized_correlation, 'omitmissing'), 'r', 'LineWidth',2)
+xlim([-1 1])
+
+
 
 %% plot global mi distribution and observations
 
